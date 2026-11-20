@@ -1,17 +1,29 @@
-## recupération des données
+# À avoir
 
-connecté le module au robot
-recuprération des données raw
+- Fonctionnalité de la ronde
+- Module d'alarme à poser et coder
 
-## traitement des données
+## Tâches
 
-données brut en distance
+- Vérifier le fonctionnement de la collision
+- Synchronisation des plans 2D (récupérer les données de parcours afin de créer une carte initiale)
+- Traiter le signal reçu et bloquer le robot en cas d'obstacle initial
 
-## carte
+## Récupération des données
 
-création de la carte 2D
+- Connecter le module au robot
+- Récupération des données brutes (raw)
 
-## ordre programmable
+## Traitement des données
 
-chaine d'action
-condition d'arret automatique
+- Conversion des données brutes en distance via des ondes ultrasonores ($40\text{ kHz}$)
+- Distance \* 0.032 / 2
+
+## Carte
+
+- Création de la carte 2D (génération du plan par superposition des éléments reçus par le capteur)
+
+## Ordres programmables
+
+- Chaîne d'actions
+- Conditions d'arrêt automatique
