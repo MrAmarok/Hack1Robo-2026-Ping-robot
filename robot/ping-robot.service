@@ -1,0 +1,60 @@
+[Unit]
+Description=Robot Ping (Raspberry Pi)
+# NE PAS attendre network-online.target : avec une cle 4G, cette cible n'est
+# souvent jamais atteinte (interface modem non reconnue comme "online"), ce qui
+# empeche le service de demarrer. Le robot se reconnecte tout seul en boucle
+# (reconnection: Infinity), donc il peut demarrer avant que le reseau soit pret.
+After=network.target
+
+[Service]
+Type=simple
+
+# >>> À ADAPTER À TON INSTALLATION <<<
+# Dossier où se trouve robot.js
+WorkingDirectory=/home/pi/ping/robot
+# Utilisateur Linux du Pi (souvent "pi", parfois ton prénom)
+User=pi
+
+# --- Réglages du robot (mêmes que tes variables en ligne de commande) ---
+Environment=CODE=123456
+# Serveur VPS (le serveur ecoute sur le port 3000)
+Environment=SERVER_URL=http://<ip-serveur>:3000
+# MAC de l'enceinte Bluetooth (bluetoothctl). Vide = sortie audio par defaut.
+# Remplace par la MAC de ta nouvelle enceinte, ex: AA:BB:CC:DD:EE:FF
+Environment=SPEAKER_MAC=
+Environment=GPS_ENABLE=true
+# GPS branche en USB -> /dev/ttyACM0
+Environment=GPS_PORT=/dev/ttyACM0
+# Cameras : NE PAS mettre /dev/videoN ici. robot.js utilise par defaut les
+# chemins stables /dev/v4l/by-id/... (le modele de la webcam est dans le nom),
+# alors que video0/video2 s'inversent au moindre rebranchement -- et encore
+# plus sur Pi 5. N'ajoute CAMERA_DEVICE / CAMERA_DEVICE_REAR que si tu changes
+# de webcam (`ls /dev/v4l/by-id/` pour le chemin exact).
+# Arduino cable sur l'UART GPIO du Pi.
+#   Pi 3/4 : /dev/serial0  (raspi-config > Interface Options > Serial Port)
+#   Pi 5   : /dev/ttyAMA0  (necessite dtparam=uart0=on dans
+#            /boot/firmware/config.txt ; ttyAMA10 = connecteur de debug)
+Environment=ARDUINO_PORT=/dev/serial0
+# Micro de l'Innomaker, la camera AVANT (pas celui de la Webcam ML, montee a
+# l'arriere). Le nom de carte ALSA est stable, contrairement a plughw:0,0 qui
+# change selon l'ordre de branchement. Nom exact : cat /proc/asound/cards
+Environment=AUDIO_CARD=InnomakerU20CAM
+Environment="AUDIO_DEVICE=plug:'dsnoop:CARD=InnomakerU20CAM,DEV=0'"
+# Micro Opus en WebRTC, ecoute cote telephone en mode appel.
+Environment=RTC_AUDIO=true
+# aplay = buffer ALSA 0.7s, resiste aux micro-coupures Bluetooth (son hache)
+Environment=TTS_PLAYER=aplay
+Environment=TTS_KEEP_LAST_CLIP=true
+# (ajoute d'autres lignes Environment=... au besoin, ex. PSEUDO=Robot)
+# NB: l'utilisateur du service doit etre dans les groupes dialout, video ET audio
+#     (sudo usermod -aG dialout,video,audio <user> puis reboot).
+
+# Lancement
+ExecStart=/usr/bin/node robot.js
+
+# Redémarre automatiquement si ça plante ou au reboot
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

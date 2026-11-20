@@ -1,0 +1,104 @@
+{
+  "expo": {
+    "name": "ping",
+    "slug": "ping",
+    "version": "1.1.5",
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "ping",
+    "userInterfaceStyle": "automatic",
+    "updates": {
+      "url": "https://u.expo.dev/85450f46-7019-4732-a217-7d66824147e5",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 5000
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.andya.ping",
+      "buildNumber": "5",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "config": {
+        "googleMapsApiKey": "REDACTED"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Votre position est nécessaire pour afficher votre localisation sur la carte et rejoindre votre contact.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Votre position peut être utilisée pour un suivi précis, y compris lorsque l'app est en arrière-plan, afin d'améliorer l'expérience de rapprochement.",
+        "NSCameraUsageDescription": "L'accès à la caméra permet d'afficher en direct la vue de la caméra embarquée du robot pendant que vous le pilotez.",
+        "NSMicrophoneUsageDescription": "L'accès au micro est requis par les fonctions audio/vidéo temps réel utilisées lors du pilotage du robot.",
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      },
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.andya.ping",
+      "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "REDACTED"
+        }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-notifications",
+      "expo-asset",
+      "./plugins/withFmtFix",
+      "expo-audio",
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Pour enregistrer les photos de la camera du robot dans ta galerie.",
+          "photosPermission": "Pour enregistrer les photos de la camera du robot dans ta galerie."
+        }
+      ],
+      "@config-plugins/react-native-webrtc"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "85450f46-7019-4732-a217-7d66824147e5"
+      },
+      "googleMapsApiKey": "REDACTED"
+    }
+  }
+}
