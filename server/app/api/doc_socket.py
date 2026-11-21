@@ -134,6 +134,7 @@ T_ALERTES = "⚡ Socket · Surveillance et alertes"
 T_REC = "⚡ Socket · Enregistrement vidéo"
 T_VOIX = "⚡ Socket · Assistant vocal"
 T_RT = "⚡ Socket · Conversation en direct"
+T_SONAR = "⚡ Socket · Carte sonar"
 
 THEMES = [
     (T_SALON, "Appairage au salon, élection du pilote, admission des spectateurs, rattrapage des événements manqués."),
@@ -147,6 +148,7 @@ THEMES = [
     (T_REC, "Enregistrement mp4 sur le VPS et enregistrement HD sur le robot."),
     (T_VOIX, "« Hey Solana » : questions vocales tour par tour et vision d'évitement d'obstacles."),
     (T_RT, "Conversation vocale continue avec OpenAI Realtime."),
+    (T_SONAR, "Carte d'occupation calculée par map_sonar.py, poussée en direct à l'app (salon SONAR_MAP_ROOM)."),
 ]
 
 A_PILOTE = "app (pilote)"
@@ -716,6 +718,31 @@ EVENEMENTS: list[Evenement] = [
               recu_par=A_SALON),
     Evenement("rt_veille", T_RT, "État de veille", "", recu=EtatVeille, recu_par=A_SALON),
 
+    Evenement(
+        "sonar_map_request", T_SONAR, "Demander la dernière carte sonar",
+        "Seulement dans le salon `SONAR_MAP_ROOM` configuré sur le serveur, pour le pilote ou un spectateur "
+        "admis. Le serveur répond par `sonar_map_snapshot` si une carte est disponible. Le contenu envoyé est "
+        "ignoré.",
+        emis=Vide, emis_par=A_APP,
+    ),
+    Evenement(
+        "sonar_map_snapshot", T_SONAR, "Carte sonar",
+        "Image de la carte d'occupation produite par `map_sonar.py` (fichier `SONAR_SNAPSHOT_FILE`, relu toutes "
+        "les 0,5 s). Envoyée à chaque nouvelle carte au pilote et aux spectateurs du salon `SONAR_MAP_ROOM`, ou "
+        "en réponse à `sonar_map_request`. Noir = occupé, blanc = libre, gris = inconnu.",
+        recu=modele(
+            "SonarMapSnapshot",
+            {"image": {"format": "png", "data": "iVBORw0KGgo…"}, "readingCount": 48, "totalReadings": 360,
+             "resolutionM": 0.05, "updatedAt": 1795268581450, "code": "sonar-demo"},
+            image=(dict, "`format` (`png` ou `svg`) et `data` (PNG en base64, ou texte SVG)."),
+            readingCount=(int, "Mesures prises en compte dans cette image."),
+            totalReadings=(int, "Mesures disponibles au total."),
+            resolutionM=(float, "Taille d'un pixel, en mètres."),
+            updatedAt=(int, "Heure de calcul (ms)."),
+            code=CODE,
+        ),
+        recu_par="app (pilote et spectateurs)",
+    ),
 ]
 
 

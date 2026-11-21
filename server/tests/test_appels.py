@@ -22,9 +22,22 @@ from app.services import appel_direct as ad
 from app.services import realtime_voix as rv
 
 ENV_NETTOYES = [
-    "OPENAI_API_KEY", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM", "ALERTE_APPEL_NUMERO",
-    "ALERTE_APPEL_CADENCE_MS", "PUBLIC_URL", "APPEL_FLUX_URL", "APPEL_DUREE_MAX_MS", "APPEL_VAD_SEUIL",
-    "PROCHE_NUMERO", "PROCHE_NOM", "OWNER_NAME", "ADRESSE_MAISON", "REALTIME_MODEL", "REALTIME_VOICE",
+    "OPENAI_API_KEY",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_FROM",
+    "ALERTE_APPEL_NUMERO",
+    "ALERTE_APPEL_CADENCE_MS",
+    "PUBLIC_URL",
+    "APPEL_FLUX_URL",
+    "APPEL_DUREE_MAX_MS",
+    "APPEL_VAD_SEUIL",
+    "PROCHE_NUMERO",
+    "PROCHE_NOM",
+    "OWNER_NAME",
+    "ADRESSE_MAISON",
+    "REALTIME_MODEL",
+    "REALTIME_VOICE",
     "REALTIME_VEILLE",
 ]
 
@@ -56,7 +69,9 @@ class FauxTwilio:
 
     async def __call__(self, to, twiml):
         self.appels.append((to, twiml))
-        return {"ok": True, "sid": f"CA{len(self.appels)}"} if self.ok else {"ok": False}
+        return (
+            {"ok": True, "sid": f"CA{len(self.appels)}"} if self.ok else {"ok": False}
+        )
 
 
 def test_xml():
@@ -108,7 +123,10 @@ async def test_appel_coupe_ou_non_configure(monkeypatch, capsys):
     configurer_twilio(monkeypatch)
     aa.regler_appel("R1", False)
     assert await aa.appeler_alerte("R1", "10:00", None) is False
-    assert "[APPEL] R1 : appels coupes par l'utilisateur, pas d'appel." in capsys.readouterr().out
+    assert (
+        "[APPEL] R1 : appels coupes par l'utilisateur, pas d'appel."
+        in capsys.readouterr().out
+    )
     assert faux.appels == []
 
 
@@ -121,7 +139,10 @@ async def test_cadence_commune_a_tous_les_robots(monkeypatch, capsys):
     assert "[APPEL] R1 : appel lance (CA1)." in capsys.readouterr().out
     assert await aa.appeler_alerte("R1", "10:01", None) is False
     assert await aa.appeler_alerte("R2", "10:01", None) is False
-    assert "[APPEL] R2 : deja appele il y a 0 s, pas de nouvel appel." in capsys.readouterr().out
+    assert (
+        "[APPEL] R2 : deja appele il y a 0 s, pas de nouvel appel."
+        in capsys.readouterr().out
+    )
     assert len(faux.appels) == 1
     monkeypatch.setattr(aa, "_dernier_appel", aa._dernier_appel - 600001)
     assert await aa.appeler_alerte("R2", "10:11", None) is True
@@ -147,7 +168,9 @@ async def test_repli_message_lu_sans_openai(monkeypatch, capsys):
     configurer_twilio(monkeypatch)
     faux = FauxTwilio()
     monkeypatch.setattr(aa, "lancer_appel_twilio", faux)
-    assert await aa.appeler_alerte("R1", "03:12", 'Un "homme" <cagoule> & gants.') is True
+    assert (
+        await aa.appeler_alerte("R1", "03:12", 'Un "homme" <cagoule> & gants.') is True
+    )
     to, twiml = faux.appels[0]
     assert to == "+33600000000"
     msg = (
@@ -161,10 +184,16 @@ async def test_repli_message_lu_sans_openai(monkeypatch, capsys):
         f'<Say language="fr-FR" voice="Polly.Lea">{msg}</Say>'
         "</Response>"
     )
-    assert "[TEL] OPENAI_API_KEY absente : appel en message lu, sans conversation." in capsys.readouterr().out
+    assert (
+        "[TEL] OPENAI_API_KEY absente : appel en message lu, sans conversation."
+        in capsys.readouterr().out
+    )
     monkeypatch.setenv("ALERTE_APPEL_CADENCE_MS", "0")
     await aa.appeler_alerte("R1", "03:13", None)
-    assert "dans la maison à 03:13. La photo est dans l'application.</Say>" in faux.appels[1][1]
+    assert (
+        "dans la maison à 03:13. La photo est dans l'application.</Say>"
+        in faux.appels[1][1]
+    )
 
 
 @pytest.mark.asyncio
@@ -187,7 +216,11 @@ async def test_appel_branche_sur_l_assistant(monkeypatch):
 
 def brancher_transport(monkeypatch, gestionnaire):
     monkeypatch.setattr(
-        aa, "_client", lambda: httpx.AsyncClient(transport=httpx.MockTransport(gestionnaire), timeout=10)
+        aa,
+        "_client",
+        lambda: httpx.AsyncClient(
+            transport=httpx.MockTransport(gestionnaire), timeout=10
+        ),
     )
 
 
@@ -201,12 +234,17 @@ async def test_lancer_appel_twilio_succes(monkeypatch):
         return httpx.Response(201, json={"sid": "CA999", "status": "queued"})
 
     brancher_transport(monkeypatch, gestionnaire)
-    r = await aa.lancer_appel_twilio("+33611111111", "<Response><Say>é &amp;</Say></Response>")
+    r = await aa.lancer_appel_twilio(
+        "+33611111111", "<Response><Say>é &amp;</Say></Response>"
+    )
     assert r == {"ok": True, "sid": "CA999"}
     req = vues[0]
     assert req.method == "POST"
     assert str(req.url) == "https://api.twilio.com/2010-04-01/Accounts/AC123/Calls.json"
-    assert req.headers["authorization"] == "Basic " + base64.b64encode(b"AC123:jeton-secret").decode()
+    assert (
+        req.headers["authorization"]
+        == "Basic " + base64.b64encode(b"AC123:jeton-secret").decode()
+    )
     assert req.headers["content-type"] == "application/x-www-form-urlencoded"
     corps = parse_qs(req.content.decode())
     assert corps == {
@@ -219,10 +257,17 @@ async def test_lancer_appel_twilio_succes(monkeypatch):
 @pytest.mark.asyncio
 async def test_lancer_appel_twilio_refus(monkeypatch, capsys):
     configurer_twilio(monkeypatch)
-    brancher_transport(monkeypatch, lambda req: httpx.Response(400, json={"message": "numero invalide"}))
+    brancher_transport(
+        monkeypatch,
+        lambda req: httpx.Response(400, json={"message": "numero invalide"}),
+    )
     assert await aa.lancer_appel_twilio("+1", "<Response/>") == {"ok": False}
-    assert "[APPEL] refus Twilio (HTTP 400) : numero invalide" in capsys.readouterr().out
-    brancher_transport(monkeypatch, lambda req: httpx.Response(500, text="<html>panne</html>"))
+    assert (
+        "[APPEL] refus Twilio (HTTP 400) : numero invalide" in capsys.readouterr().out
+    )
+    brancher_transport(
+        monkeypatch, lambda req: httpx.Response(500, text="<html>panne</html>")
+    )
     assert await aa.lancer_appel_twilio("+1", "<Response/>") == {"ok": False}
     assert "[APPEL] refus Twilio (HTTP 500) : sans detail" in capsys.readouterr().out
 
@@ -254,8 +299,9 @@ def test_twiml_conversation(monkeypatch, capsys):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setenv("PUBLIC_URL", "http://exemple.org")
     assert ad.twiml_conversation("R1", "10:00", None) is None
-    assert "[TEL] adresse de flux non chiffree (ws://exemple.org/ping/twilio-flux) : appel en message lu." in (
-        capsys.readouterr().out
+    assert (
+        "[TEL] adresse de flux non chiffree (ws://exemple.org/ping/twilio-flux) : appel en message lu."
+        in (capsys.readouterr().out)
     )
     monkeypatch.setenv("APPEL_FLUX_URL", 'wss://h/f?a=1&b="2"')
     twiml = ad.twiml_conversation("R1", "10:00", "phrase")
@@ -281,7 +327,9 @@ def test_consignes_telephone(monkeypatch):
     c = ad._consignes_telephone("03:12", "un homme")
     assert "a 03:12 (sur la photo : un homme). " in c
     assert "l'adresse, 3 rue Haute, et la description" in c
-    assert "Tu peux aussi prevenir son proche avec prevenir_proche, si Lea le demande" in c
+    assert (
+        "Tu peux aussi prevenir son proche avec prevenir_proche, si Lea le demande" in c
+    )
     monkeypatch.setenv("PROCHE_NOM", "Paul")
     assert "prevenir Paul avec" in ad._consignes_telephone("x", None)
 
@@ -297,9 +345,13 @@ async def test_outils_telephone(monkeypatch, capsys):
     outils = ad._outils_telephone("R1")
     assert [o["declaration"]["name"] for o in outils] == ["alarme", "dire_par_le_robot"]
     alarme, dire = (o["executer"] for o in outils)
-    assert await alarme({"on": True}) == [{"type": "text", "text": "Sirene declenchee."}]
+    assert await alarme({"on": True}) == [
+        {"type": "text", "text": "Sirene declenchee."}
+    ]
     assert await alarme({"on": False}) == [{"type": "text", "text": "Sirene arretee."}]
-    assert await dire({"texte": "  Sortez !  "}) == [{"type": "text", "text": "Phrase prononcee par le robot."}]
+    assert await dire({"texte": "  Sortez !  "}) == [
+        {"type": "text", "text": "Phrase prononcee par le robot."}
+    ]
     assert await dire({"texte": "   "}) == [{"type": "text", "text": "Rien a dire."}]
     await dire({"texte": "x" * 400})
     assert emis == [
@@ -328,9 +380,13 @@ async def test_prevenir_proche(monkeypatch, capsys):
         "A utiliser seulement si Andy le demande ou l'accepte."
     )
     prevenir = outils[2]["executer"]
-    assert await prevenir({"message": "Un intrus."}) == [{"type": "text", "text": "L'appel a Paul a echoue."}]
+    assert await prevenir({"message": "Un intrus."}) == [
+        {"type": "text", "text": "L'appel a Paul a echoue."}
+    ]
     faux.ok = True
-    assert await prevenir({"message": "Un intrus."}) == [{"type": "text", "text": "Paul est en train d'etre appele."}]
+    assert await prevenir({"message": "Un intrus."}) == [
+        {"type": "text", "text": "Paul est en train d'etre appele."}
+    ]
     assert await prevenir({"message": "Encore."}) == [
         {"type": "text", "text": "Paul a deja ete appele pendant cet appel."}
     ]
@@ -407,7 +463,9 @@ class FauxFluxTwilio:
         self.envoyes.append(json.loads(t))
 
     async def close(self, code=1000, reason=None):
-        assert self.application_state == WebSocketState.CONNECTED, "close() appele deux fois"
+        assert (
+            self.application_state == WebSocketState.CONNECTED
+        ), "close() appele deux fois"
         self.application_state = WebSocketState.DISCONNECTED
         self.ferme = True
         self._entrants.put_nowait({"type": "websocket.disconnect", "code": code})
@@ -448,7 +506,13 @@ async def banc(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     b = Banc()
     vb = types.ModuleType("app.services.voice_brain")
-    vb.TOOLS = [{"name": "regarder", "description": "Regarde.", "input_schema": {"type": "object"}}]
+    vb.TOOLS = [
+        {
+            "name": "regarder",
+            "description": "Regarde.",
+            "input_schema": {"type": "object"},
+        }
+    ]
     vb.SYSTEM_PROMPT = "PROMPT"
     vb.run_tool = b.run_tool
     monkeypatch.setitem(sys.modules, "app.services.voice_brain", vb)
@@ -474,7 +538,16 @@ async def decrocher(banc: Banc, code="R7", heure="03:12", phrase="un homme en no
     ws = FauxFluxTwilio()
     tache = asyncio.ensure_future(ad._brancher(ws))
     ws.pousser({"event": "connected", "protocol": "Call", "version": "1.0.0"})
-    ws.pousser({"event": "start", "start": {"streamSid": "MZ1", "callSid": "CA1", "customParameters": {"jeton": jeton}}})
+    ws.pousser(
+        {
+            "event": "start",
+            "start": {
+                "streamSid": "MZ1",
+                "callSid": "CA1",
+                "customParameters": {"jeton": jeton},
+            },
+        }
+    )
     await attendre(lambda: banc.conns and len(banc.conns[-1].envoyes) >= 3)
     return ws, banc.conns[-1], tache, jeton
 
@@ -487,51 +560,123 @@ async def test_conversation_telephonique(banc, tmp_path, capsys):
 
     upd = conn.envoyes[0]["session"]
     assert upd["audio"]["input"]["format"] == {"type": "audio/pcmu"}
-    assert upd["audio"]["output"] == {"format": {"type": "audio/pcmu"}, "voice": "marin"}
-    assert upd["audio"]["input"]["turn_detection"] == {
-        "type": "server_vad", "threshold": 0.5, "prefix_padding_ms": 300, "silence_duration_ms": 600,
+    assert upd["audio"]["output"] == {
+        "format": {"type": "audio/pcmu"},
+        "voice": "marin",
     }
-    assert upd["instructions"].startswith("PROMPT\n\nTu es maintenant en conversation VOCALE DIRECTE.")
+    assert upd["audio"]["input"]["turn_detection"] == {
+        "type": "server_vad",
+        "threshold": 0.5,
+        "prefix_padding_ms": 300,
+        "silence_duration_ms": 600,
+    }
+    assert upd["instructions"].startswith(
+        "PROMPT\n\nTu es maintenant en conversation VOCALE DIRECTE."
+    )
     assert "\n\nAPPEL TELEPHONIQUE. Tu parles a Andy" in upd["instructions"]
     assert "a 03:12 (sur la photo : un homme en noir)." in upd["instructions"]
-    assert [t["name"] for t in upd["tools"]] == ["regarder", "alarme", "dire_par_le_robot"]
-    assert conn.envoyes[1] == {"type": "conversation.item.create", "item": {
-        "type": "message", "role": "user", "content": [{"type": "input_text", "text": (
-            "[L'appel vient d'etre decroche.] Annonce en une ou deux phrases pourquoi tu appelles "
-            "et ce que montre la photo, puis demande ce qu'il veut faire."
-        )}],
-    }}
+    assert [t["name"] for t in upd["tools"]] == [
+        "regarder",
+        "alarme",
+        "dire_par_le_robot",
+    ]
+    assert conn.envoyes[1] == {
+        "type": "conversation.item.create",
+        "item": {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "[L'appel vient d'etre decroche.] Annonce en une ou deux phrases pourquoi tu appelles "
+                        "et ce que montre la photo, puis demande ce qu'il veut faire."
+                    ),
+                }
+            ],
+        },
+    }
     assert conn.envoyes[2] == {"type": "response.create"}
 
     ulaw = bytes([0xFF, 0x7F, 0x00, 0x80, 0x55]) * 32
-    ws.pousser({"event": "media", "media": {"track": "inbound", "payload": base64.b64encode(ulaw).decode()}})
+    ws.pousser(
+        {
+            "event": "media",
+            "media": {"track": "inbound", "payload": base64.b64encode(ulaw).decode()},
+        }
+    )
     await attendre(lambda: "input_audio_buffer.append" in conn.types())
     ajout = [m for m in conn.envoyes if m["type"] == "input_audio_buffer.append"][0]
     assert base64.b64decode(ajout["audio"]) == ulaw
 
-    conn.pousser({"type": "response.output_audio.delta", "delta": base64.b64encode(b"\x01\x02").decode()})
+    conn.pousser(
+        {
+            "type": "response.output_audio.delta",
+            "delta": base64.b64encode(b"\x01\x02").decode(),
+        }
+    )
     await attendre(lambda: ws.envoyes)
-    assert ws.envoyes[0] == {"event": "media", "streamSid": "MZ1", "media": {"payload": "AQI="}}
+    assert ws.envoyes[0] == {
+        "event": "media",
+        "streamSid": "MZ1",
+        "media": {"payload": "AQI="},
+    }
 
     conn.pousser({"type": "input_audio_buffer.speech_started"})
     await attendre(lambda: len(ws.envoyes) == 2)
     assert ws.envoyes[1] == {"event": "clear", "streamSid": "MZ1"}
 
-    conn.pousser({"type": "response.done", "response": {"output": [
-        {"type": "function_call", "name": "alarme", "call_id": "c1", "arguments": '{"on": true}'},
-        {"type": "function_call", "name": "regarder", "call_id": "c2", "arguments": "{}"},
-    ]}})
+    conn.pousser(
+        {
+            "type": "response.done",
+            "response": {
+                "output": [
+                    {
+                        "type": "function_call",
+                        "name": "alarme",
+                        "call_id": "c1",
+                        "arguments": '{"on": true}',
+                    },
+                    {
+                        "type": "function_call",
+                        "name": "regarder",
+                        "call_id": "c2",
+                        "arguments": "{}",
+                    },
+                ]
+            },
+        }
+    )
     await attendre(lambda: conn.types().count("response.create") == 2)
     assert ("R7", "robot_alarme", {"on": True}) in banc.emis
     nom, _entree, ctx = banc.outils[0]
-    assert nom == "regarder" and ctx["frame"] == b"\xff\xd8photo" and ctx["code"] == "R7"
-    sorties = [m["item"] for m in conn.envoyes if m.get("item", {}).get("type") == "function_call_output"]
+    assert (
+        nom == "regarder" and ctx["frame"] == b"\xff\xd8photo" and ctx["code"] == "R7"
+    )
+    sorties = [
+        m["item"]
+        for m in conn.envoyes
+        if m.get("item", {}).get("type") == "function_call_output"
+    ]
     assert sorties == [
-        {"type": "function_call_output", "call_id": "c1", "output": '{"resultat":"Sirene declenchee."}'},
-        {"type": "function_call_output", "call_id": "c2", "output": '{"resultat":"Photo regardee."}'},
+        {
+            "type": "function_call_output",
+            "call_id": "c1",
+            "output": '{"resultat":"Sirene declenchee."}',
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "c2",
+            "output": '{"resultat":"Photo regardee."}',
+        },
     ]
 
-    conn.pousser({"type": "conversation.item.input_audio_transcription.completed", "transcript": "allo"})
+    conn.pousser(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "allo",
+        }
+    )
     await attendre(lambda: ("R7", "rt_entendu", {"texte": "allo"}) in banc.emis)
     assert not [e for e in banc.emis if e[1] == "rt_veille"]
 
@@ -549,10 +694,20 @@ async def test_jeton_refuse(banc, capsys):
     for params in [{}, {"jeton": "inconnu"}, {"jeton": ["x"]}]:
         ws = FauxFluxTwilio()
         tache = asyncio.ensure_future(ad._brancher(ws))
-        ws.pousser({"event": "start", "start": {"streamSid": "MZ1", "customParameters": params}})
+        ws.pousser(
+            {
+                "event": "start",
+                "start": {"streamSid": "MZ1", "customParameters": params},
+            }
+        )
         await asyncio.wait_for(tache, 2)
         assert ws.ferme
-    assert capsys.readouterr().out.count("[TEL] flux refuse : jeton absent, inconnu ou expire.") == 3
+    assert (
+        capsys.readouterr().out.count(
+            "[TEL] flux refuse : jeton absent, inconnu ou expire."
+        )
+        == 3
+    )
     jeton = jeton_de(ad.twiml_conversation("R7", "03:12", None))
     ad._attentes[jeton]["expire"] = 0
     ws = FauxFluxTwilio()
@@ -569,7 +724,9 @@ async def test_openai_ferme_on_raccroche(banc, capsys):
     conn.fermer_par_pair(1000)
     await asyncio.wait_for(tache, 2)
     assert ws.ferme
-    assert "[TEL] R7 : fin de l'appel (session OpenAI fermee)." in capsys.readouterr().out
+    assert (
+        "[TEL] R7 : fin de l'appel (session OpenAI fermee)." in capsys.readouterr().out
+    )
 
 
 @pytest.mark.asyncio
@@ -587,7 +744,10 @@ async def test_duree_maximale(banc, monkeypatch, capsys):
     ws, conn, tache, _ = await decrocher(banc)
     await asyncio.wait_for(tache, 2)
     assert ws.ferme and conn.state is State.CLOSED
-    assert "[TEL] R7 : fin de l'appel (duree maximale atteinte)." in capsys.readouterr().out
+    assert (
+        "[TEL] R7 : fin de l'appel (duree maximale atteinte)."
+        in capsys.readouterr().out
+    )
 
 
 @pytest.mark.asyncio
@@ -596,7 +756,12 @@ async def test_openai_indisponible_au_decroche(banc, monkeypatch, capsys):
     monkeypatch.delenv("OPENAI_API_KEY")
     ws = FauxFluxTwilio()
     tache = asyncio.ensure_future(ad._brancher(ws))
-    ws.pousser({"event": "start", "start": {"streamSid": "MZ1", "customParameters": {"jeton": jeton}}})
+    ws.pousser(
+        {
+            "event": "start",
+            "start": {"streamSid": "MZ1", "customParameters": {"jeton": jeton}},
+        }
+    )
     await asyncio.wait_for(tache, 2)
     assert ws.ferme and banc.conns == []
     assert "[TEL] R7 : fin de l'appel (OpenAI indisponible)." in capsys.readouterr().out
@@ -608,7 +773,11 @@ def test_route_websocket():
     with TestClient(app) as client:
         with client.websocket_connect("/twilio-flux", subprotocols=["audio"]) as w:
             assert w.accepted_subprotocol == "audio"
-            w.send_text(json.dumps({"event": "start", "start": {"customParameters": {"jeton": "faux"}}}))
+            w.send_text(
+                json.dumps(
+                    {"event": "start", "start": {"customParameters": {"jeton": "faux"}}}
+                )
+            )
             with pytest.raises(WebSocketDisconnect):
                 w.receive_text()
         with client.websocket_connect("/twilio-flux?x=1") as w:

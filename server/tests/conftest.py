@@ -13,8 +13,14 @@ os.environ["REC_DIR"] = os.path.join(_TMP, "rec")
 os.environ["REC_DOSSIER"] = os.path.join(_TMP, "rec")
 os.environ["MTX_HTTP_PORT"] = "1"
 os.environ["CAPTEUR_DIR"] = os.path.join(_TMP, "capteur")
-for _cle in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DEEPGRAM_API_KEY", "TELEGRAM_TOKEN",
-             "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"):
+for _cle in (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "DEEPGRAM_API_KEY",
+    "TELEGRAM_TOKEN",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+):
     os.environ.pop(_cle, None)
 
 import pytest

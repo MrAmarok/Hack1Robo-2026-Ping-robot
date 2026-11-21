@@ -55,7 +55,12 @@ def twiml_conversation(code: Any, heure: Any, phrase: Any) -> str | None:
         if a["expire"] < t:
             del _attentes[j]
     jeton = secrets.token_hex(16)
-    _attentes[jeton] = {"code": str(code), "heure": heure, "phrase": phrase, "expire": t + VALIDITE_JETON_MS}
+    _attentes[jeton] = {
+        "code": str(code),
+        "heure": heure,
+        "phrase": phrase,
+        "expire": t + VALIDITE_JETON_MS,
+    }
     return (
         "<Response><Connect>"
         f'<Stream url="{xml(url)}"><Parameter name="jeton" value="{jeton}"/></Stream>'
@@ -70,8 +75,12 @@ def _outils_telephone(code: str) -> list[dict]:
     async def alarme(entree: dict) -> list[dict]:
         on = entree.get("on")
         await emit_room(code, "robot_alarme", {"on": bool(on)})
-        log(f"[TEL] {code} : sirene {'declenchee' if on else 'arretee'} par l'assistant.")
-        return [{"type": "text", "text": "Sirene declenchee." if on else "Sirene arretee."}]
+        log(
+            f"[TEL] {code} : sirene {'declenchee' if on else 'arretee'} par l'assistant."
+        )
+        return [
+            {"type": "text", "text": "Sirene declenchee." if on else "Sirene arretee."}
+        ]
 
     async def dire_par_le_robot(entree: dict) -> list[dict]:
         t = str(entree.get("texte") or "").strip()[:300]
@@ -89,7 +98,12 @@ def _outils_telephone(code: str) -> list[dict]:
                 "description": "Declenche ou arrete la sirene du robot, dans la maison.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"on": {"type": "boolean", "description": "true pour declencher, false pour arreter"}},
+                    "properties": {
+                        "on": {
+                            "type": "boolean",
+                            "description": "true pour declencher, false pour arreter",
+                        }
+                    },
                     "required": ["on"],
                 },
             },
@@ -105,7 +119,12 @@ def _outils_telephone(code: str) -> list[dict]:
                 ),
                 "parameters": {
                     "type": "object",
-                    "properties": {"texte": {"type": "string", "description": "La phrase exacte a prononcer"}},
+                    "properties": {
+                        "texte": {
+                            "type": "string",
+                            "description": "La phrase exacte a prononcer",
+                        }
+                    },
                     "required": ["texte"],
                 },
             },
@@ -122,7 +141,12 @@ def _outils_telephone(code: str) -> list[dict]:
             nonlocal deja_prevenu
             message = entree.get("message")
             if deja_prevenu:
-                return [{"type": "text", "text": f"{nom} a deja ete appele pendant cet appel."}]
+                return [
+                    {
+                        "type": "text",
+                        "text": f"{nom} a deja ete appele pendant cet appel.",
+                    }
+                ]
             deja_prevenu = True
             texte = (
                 f"Message automatique du robot de surveillance de {owner}. "
@@ -145,22 +169,29 @@ def _outils_telephone(code: str) -> list[dict]:
             log(f"[TEL] {code} : {nom} prevenu ({r.get('sid') or '?'}).")
             return [{"type": "text", "text": f"{nom} est en train d'etre appele."}]
 
-        outils.append({
-            "declaration": {
-                "type": "function",
-                "name": "prevenir_proche",
-                "description": (
-                    f"Appelle {nom} et lui lit un message d'alerte avec l'adresse. "
-                    f"A utiliser seulement si {owner} le demande ou l'accepte."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {"message": {"type": "string", "description": "Ce qui se passe, en une phrase"}},
-                    "required": ["message"],
+        outils.append(
+            {
+                "declaration": {
+                    "type": "function",
+                    "name": "prevenir_proche",
+                    "description": (
+                        f"Appelle {nom} et lui lit un message d'alerte avec l'adresse. "
+                        f"A utiliser seulement si {owner} le demande ou l'accepte."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message": {
+                                "type": "string",
+                                "description": "Ce qui se passe, en une phrase",
+                            }
+                        },
+                        "required": ["message"],
+                    },
                 },
-            },
-            "executer": prevenir_proche,
-        })
+                "executer": prevenir_proche,
+            }
+        )
     return outils
 
 
@@ -264,7 +295,11 @@ class _Appel:
 
     async def _sur_audio(self, octets: bytes) -> None:
         await self.vers_twilio(
-            {"event": "media", **self._avec_stream({}), "media": {"payload": base64.b64encode(bytes(octets)).decode("ascii")}}
+            {
+                "event": "media",
+                **self._avec_stream({}),
+                "media": {"payload": base64.b64encode(bytes(octets)).decode("ascii")},
+            }
         )
 
     async def _sur_etat(self, e: dict) -> None:
@@ -342,12 +377,18 @@ class _Appel:
                 await self.terminer("OpenAI indisponible")
                 return
             self.fin_forcee = asyncio.get_running_loop().call_later(
-                _duree_max_ms() / 1000, lambda: tache(self.terminer("duree maximale atteinte"))
+                _duree_max_ms() / 1000,
+                lambda: tache(self.terminer("duree maximale atteinte")),
             )
             return
 
         media = m.get("media")
-        if evenement == "media" and self.session and isinstance(media, dict) and media.get("payload"):
+        if (
+            evenement == "media"
+            and self.session
+            and isinstance(media, dict)
+            and media.get("payload")
+        ):
             self.session.pousser_audio(_b64(media["payload"]))
             return
 

@@ -277,6 +277,7 @@ void presence_gerer() {
 uint32_t t_mesure = 0;
 
 void distance_gerer() {
+  // Scan toutes les secondes
   if (millis() - t_mesure < 1000) return;
   t_mesure = millis();
 
@@ -288,10 +289,19 @@ void distance_gerer() {
 
   unsigned long duree = pulseIn(PIN_ECHO, HIGH, 25000UL);
   if (!duree) return;                 // pas d'echo : on se tait
-  long cm = duree / 58;               // vitesse du son, aller-retour
-  if (cm < 2 || cm > 400) return;     // hors des limites du capteur
-  Serial.print(F("D:"));
-  Serial.println(cm);
+  if (duree==0) {
+    pinMode(echoPin, OUTPUT);
+    pinMode(echoPin, LOW);
+    delay(100);
+    pinMode(echoPin, INPUT);
+  } else {
+    long dist = duree * 17 / 100;               // vitesse du son, aller-retour
+    if (dist < 2 || dist > 400) return;     // hors des limites du capteur
+    String dist_str = String(dist)
+    return "0,0,0,0," + dist_str
+  }
+  // Serial.print(F("D:"));
+  // Serial.println(cm);
 }
 
 // ---------------- protocole ----------------

@@ -9,17 +9,40 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    Response,
+    StreamingResponse,
+)
 from starlette.background import BackgroundTask
 
 from app.api.doc_http import DOC
 from app.core import config
-from app.core.config import DOSSIER_ALERTES, MTX_HOST, MTX_HTTP_PORT, PUBLIC_URL, REC_DOSSIER
+from app.core.config import (
+    DOSSIER_ALERTES,
+    MTX_HOST,
+    MTX_HTTP_PORT,
+    PUBLIC_URL,
+    REC_DOSSIER,
+)
 from app.core.logs import log, now_ms, robot_log
 from app.core.sio import emit_to
-from app.core.state import ensure_profile, log_room_event, mark_online, push_tokens, robot_du_salon
+from app.core.state import (
+    ensure_profile,
+    log_room_event,
+    mark_online,
+    push_tokens,
+    robot_du_salon,
+)
 from app.services.alertes import historique_alertes
-from app.services.push import add_persistent_token, get_tokens_for_room, is_expo_push_token
+from app.services.push import (
+    add_persistent_token,
+    get_tokens_for_room,
+    is_expo_push_token,
+)
 from app.websocket.robot import is_drive_cmd
 from app.websocket.salon import lobbies
 
@@ -46,21 +69,35 @@ _mtx_client: httpx.AsyncClient | None = None
 def _client_mtx() -> httpx.AsyncClient:
     global _mtx_client
     if _mtx_client is None:
-        _mtx_client = httpx.AsyncClient(base_url=f"http://{MTX_HOST}:{MTX_HTTP_PORT}", timeout=30)
+        _mtx_client = httpx.AsyncClient(
+            base_url=f"http://{MTX_HOST}:{MTX_HTTP_PORT}", timeout=30
+        )
     return _mtx_client
 
 
-@router.api_route("/rtc/{chemin:path}", methods=["POST"], operation_id="rtc_post", **DOC["rtc"])
-@router.api_route("/rtc/{chemin:path}", methods=["PATCH"], operation_id="rtc_patch", **DOC["rtc"])
-@router.api_route("/rtc/{chemin:path}", methods=["DELETE"], operation_id="rtc_delete", **DOC["rtc"])
-@router.api_route("/rtc/{chemin:path}", methods=["GET", "OPTIONS", "PUT", "HEAD"], include_in_schema=False)
+@router.api_route(
+    "/rtc/{chemin:path}", methods=["POST"], operation_id="rtc_post", **DOC["rtc"]
+)
+@router.api_route(
+    "/rtc/{chemin:path}", methods=["PATCH"], operation_id="rtc_patch", **DOC["rtc"]
+)
+@router.api_route(
+    "/rtc/{chemin:path}", methods=["DELETE"], operation_id="rtc_delete", **DOC["rtc"]
+)
+@router.api_route(
+    "/rtc/{chemin:path}",
+    methods=["GET", "OPTIONS", "PUT", "HEAD"],
+    include_in_schema=False,
+)
 async def rtc_proxy(chemin: str, request: Request):
     url = "/" + chemin + (f"?{request.url.query}" if request.url.query else "")
     headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP}
     headers["host"] = f"{MTX_HOST}:{MTX_HTTP_PORT}"
     client = _client_mtx()
     try:
-        up_req = client.build_request(request.method, url, headers=headers, content=await request.body())
+        up_req = client.build_request(
+            request.method, url, headers=headers, content=await request.body()
+        )
         up = await client.send(up_req, stream=True)
     except httpx.HTTPError:
         return JSONResponse({"error": "mediamtx injoignable"}, status_code=502)
@@ -68,8 +105,12 @@ async def rtc_proxy(chemin: str, request: Request):
     loc = up.headers.get("location")
     if loc and not re.match(r"^https?:", loc, re.I):
         out_headers["location"] = "/rtc" + loc
-    return StreamingResponse(up.aiter_raw(), status_code=up.status_code, headers=out_headers,
-                             background=BackgroundTask(up.aclose))
+    return StreamingResponse(
+        up.aiter_raw(),
+        status_code=up.status_code,
+        headers=out_headers,
+        background=BackgroundTask(up.aclose),
+    )
 
 
 @router.get("/alerte-photo", **DOC["alerte_photo"])
@@ -137,7 +178,11 @@ async def enregistrements(request: Request):
     dossier = _dossier_rec()
     try:
         noms = sorted(
-            (f for f in os.listdir(dossier) if f.startswith(f"robot-{code}-") and f.endswith(".mp4")),
+            (
+                f
+                for f in os.listdir(dossier)
+                if f.startswith(f"robot-{code}-") and f.endswith(".mp4")
+            ),
             reverse=True,
         )
     except OSError:
@@ -148,14 +193,21 @@ async def enregistrements(request: Request):
             mo = round(os.path.getsize(os.path.join(dossier, f)) / 1048576, 1)
         except OSError:
             mo = 0
-        videos.append({"nom": f, "mo": mo, "url": f"{PUBLIC_URL}/ping/enregistrement?f={quote(f, safe='')}"})
+        videos.append(
+            {
+                "nom": f,
+                "mo": mo,
+                "url": f"{PUBLIC_URL}/ping/enregistrement?f={quote(f, safe='')}",
+            }
+        )
     return {"videos": videos}
 
 
 @router.get("/ouvrir", response_class=HTMLResponse, **DOC["ouvrir"])
 async def ouvrir(request: Request):
     code = quote(str(request.query_params.get("code") or ""), safe="")
-    return HTMLResponse(f"""<!doctype html>
+    return HTMLResponse(
+        f"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ouvrir Ping</title>
 <style>
@@ -172,7 +224,8 @@ async def ouvrir(request: Request):
      alt="" onerror="this.style.display='none'">
 <a href="ping://">Ouvrir Ping</a>
 <p>Si rien ne se passe, ouvre l'application manuellement.</p>
-<script>setTimeout(function(){{ location.href = 'ping://'; }}, 250);</script>""")
+<script>setTimeout(function(){{ location.href = 'ping://'; }}, 250);</script>"""
+    )
 
 
 async def _corps_json(request: Request) -> dict:
@@ -221,20 +274,37 @@ async def robot_drive(request: Request):
     code, de = b.get("code"), b.get("from")
     cmd = str(b.get("cmd") or "").strip().upper()
     cmd_id = str(b.get("id") or f"{cmd}-{now_ms()}")
-    robot_log(f"[HTTP_ROBOT_DRIVE][IN] id={cmd_id} from={de or '?'} code={code or '?'} cmd={cmd}")
+    robot_log(
+        f"[HTTP_ROBOT_DRIVE][IN] id={cmd_id} from={de or '?'} code={code or '?'} cmd={cmd}"
+    )
     if not code or not is_drive_cmd(cmd):
         robot_log(f"[HTTP_ROBOT_DRIVE][DROP] id={cmd_id} code={bool(code)} cmd={cmd}")
-        return JSONResponse({"ok": False, "error": "code/cmd invalide", "id": cmd_id}, status_code=400)
+        return JSONResponse(
+            {"ok": False, "error": "code/cmd invalide", "id": cmd_id}, status_code=400
+        )
     if not _jeton_http_valide(request):
         # Pas de session ici, donc pas de controle du pilote possible : sans jeton on ne relaie plus.
         # Reponse 200 quand meme : les anciennes versions de l'app appellent cette route a chaque commande
         # (en doublon du socket) et afficheraient une erreur pour tout autre code.
-        robot_log(f"[HTTP_ROBOT_DRIVE][IGNORE] id={cmd_id} code={code} : pas de jeton, non relaye.")
-        return {"ok": False, "id": cmd_id, "cmd": cmd, "relaye": False,
-                "error": "pilotage HTTP desactive sans jeton : utiliser l'evenement Socket.IO drive"}
+        robot_log(
+            f"[HTTP_ROBOT_DRIVE][IGNORE] id={cmd_id} code={code} : pas de jeton, non relaye."
+        )
+        return {
+            "ok": False,
+            "id": cmd_id,
+            "cmd": cmd,
+            "relaye": False,
+            "error": "pilotage HTTP desactive sans jeton : utiliser l'evenement Socket.IO drive",
+        }
     robot = robot_du_salon(str(code))
     if not robot:
-        return {"ok": False, "id": cmd_id, "cmd": cmd, "relaye": False, "error": "aucun robot connecte"}
+        return {
+            "ok": False,
+            "id": cmd_id,
+            "cmd": cmd,
+            "relaye": False,
+            "error": "aucun robot connecte",
+        }
     await emit_to(robot, "robot_drive", {"id": cmd_id, "cmd": cmd, "by": de or "HTTP"})
     log_room_event(str(code), "robot_drive", {"id": cmd_id, "cmd": cmd, "by": de or "HTTP"})
     robot_log(f"[HTTP_ROBOT_DRIVE][EMIT] id={cmd_id} cmd={cmd} -> {robot}")

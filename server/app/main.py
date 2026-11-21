@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import socket
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import socketio
 from fastapi import FastAPI
@@ -13,7 +14,7 @@ from app.core.config import DEFAULT_PORT, PORT
 from app.core.logs import log
 from app.core.sio import sio
 
-from app.websocket import robot, salon
+from app.websocket import robot, salon, sonar
 from app.services import alertes, push
 from app.api.routes import router as http_router
 from app.api.capteur import router as capteur_router
@@ -21,14 +22,34 @@ from app.api.doc_http import TAGS_HTTP
 from app.api.doc_socket import INTRODUCTION, THEMES, operations
 from app.api.doc_capteur import PROTOCOLE, TAG_HTTP, TAG_WS, operation_ws
 
-GESTIONNAIRES_SOCKET = (robot, salon, alertes)
+GESTIONNAIRES_SOCKET = (robot, salon, sonar, alertes)
 
 
 _OPTIONNELS = [
-    ("app.services.voice_brain", "attach_voice_brain", "[VOICE]", "assistant vocal non demarre"),
-    ("app.services.realtime_voix", "attach_realtime_voix", "[VOICE]", "conversation en direct non demarree"),
-    ("app.services.appel_direct", "attach_appel_direct", "[TEL]", "conversation telephonique non demarree"),
-    ("app.services.enregistrement", "attach_enregistrement", "[REC]", "enregistrement non demarre"),
+    (
+        "app.services.voice_brain",
+        "attach_voice_brain",
+        "[VOICE]",
+        "assistant vocal non demarre",
+    ),
+    (
+        "app.services.realtime_voix",
+        "attach_realtime_voix",
+        "[VOICE]",
+        "conversation en direct non demarree",
+    ),
+    (
+        "app.services.appel_direct",
+        "attach_appel_direct",
+        "[TEL]",
+        "conversation telephonique non demarree",
+    ),
+    (
+        "app.services.enregistrement",
+        "attach_enregistrement",
+        "[REC]",
+        "enregistrement non demarre",
+    ),
 ]
 
 _modules_charges: dict[str, object] = {}
@@ -53,16 +74,29 @@ async def lifespan(_app: FastAPI):
         except Exception as e:
             log(f"{prefixe} {msg} : {e!r}")
     log("✅ Serveur prêt" + (f" sur le port {_port_ecoute}" if _port_ecoute else ""))
-    yield
+    sonar_task = asyncio.create_task(sonar.watch_snapshots())
+    try:
+        yield
+    finally:
+        sonar_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await sonar_task
 
 
 fastapi_app = FastAPI(
     title="Ping server",
     version="2.0.0",
     lifespan=lifespan,
-    swagger_ui_parameters={"docExpansion": "none", "filter": True, "defaultModelsExpandDepth": -1, "deepLinking": True},
+    swagger_ui_parameters={
+        "docExpansion": "none",
+        "filter": True,
+        "defaultModelsExpandDepth": -1,
+        "deepLinking": True,
+    },
 )
-fastapi_app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+fastapi_app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+)
 fastapi_app.include_router(http_router)
 fastapi_app.include_router(capteur_router)
 
@@ -117,7 +151,9 @@ def main() -> None:
             log(f"Port {port} deja utilise, bascule sur le port robot {DEFAULT_PORT}.")
             port = DEFAULT_PORT
         if not _port_libre(port):
-            log(f"Port {port} deja utilise. Arrete le process qui occupe ce port ou change PORT.")
+            log(
+                f"Port {port} deja utilise. Arrete le process qui occupe ce port ou change PORT."
+            )
             raise SystemExit(1)
     global _port_ecoute
     _port_ecoute = port
