@@ -1,5 +1,5 @@
 // arduino.js - Liaison serie Raspberry Pi <-> Arduino
-// Envoie des commandes moteur (F/B/L/R/S) et recoit la distance "D:<cm>".
+// Sends motor commands and reads sonar frames in D:x,y,rotation,0,cm format.
 'use strict';
 
 const { SerialPort } = require('serialport');
@@ -50,8 +50,18 @@ class Arduino {
         const ackCmd = line.slice(4).trim().charAt(0).toUpperCase();
         this.resolveAck(ackCmd, line);
       } else if (line.startsWith('D:')) {
-        const cm = parseInt(line.slice(2), 10);
-        if (Number.isFinite(cm)) this.onSensor(cm);
+        const mesure = line.slice(2).trim();
+        if (RE_LIGNE_CAPTEUR.test(mesure)) {
+          this.onLigneCapteur?.(mesure);
+          const distance = mesure.split(',')[4].trim();
+          if (distance) this.onSensor(Number(distance));
+        } else if (/^\d+$/.test(mesure)) {
+          const cm = Number(mesure);
+          if (Number.isFinite(cm)) {
+            this.onSensor(cm);
+            if (cm > 0) this.onLigneCapteur?.(`0,0,0,0,${cm}`);
+          }
+        }
       } else if (line.startsWith('PRES:')) {
         // Le radar n'envoie que ses CHANGEMENTS d'etat.
         this.onPresence(line.slice(5).trim() === '1');

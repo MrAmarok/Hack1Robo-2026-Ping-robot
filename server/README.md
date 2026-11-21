@@ -127,6 +127,10 @@ Tuto pas à pas côté robot : [robot/CAPTEUR.md](../robot/CAPTEUR.md).
 Le robot envoie les lignes du capteur, déjà au format de `sonar-mapping/map_sonar.py`, par un **WebSocket dédié** ;
 le serveur les range dans un CSV par session : `capteur/<code>/<session>.csv` (`CAPTEUR_DIR`).
 
+On the server, run `sudo journalctl -u ping-server -f -g '\[CAPTEUR\]'` to see
+accepted rows and the latest reading. A row ending in a comma, such as
+`0,0,0,0,`, means the server received a sample without a usable echo.
+
 ```
 code de Pauline ─▶ robot.js : capteur.envoyer("0,0,0,0,143")   (ou ligne de 5 champs écrite par l'Arduino)
                      │  ws://<serveur>:3000/ws/capteur?code=<code>&session=<session>[&cle=<ROBOT_KEY>]

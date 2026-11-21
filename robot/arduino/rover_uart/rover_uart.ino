@@ -71,7 +71,7 @@
 //
 //  CE QUE LE SKETCH ENVOIE DE LUI-MEME
 //     PRES:<0|1>     presence detectee par le radar (changements seulement)
-//     D:<cm>         distance mesuree devant, une fois par seconde
+//     D:x,y,rotation,0,cm         distance mesuree devant, une fois par seconde
 //                    (robot.js l'attend pour son evitement d'obstacles)
 // =====================================================================
 
@@ -288,7 +288,6 @@ void distance_gerer() {
   digitalWrite(PIN_TRIG, LOW);
 
   unsigned long duree = pulseIn(PIN_ECHO, HIGH, 25000UL);
-  if (!duree) return;                 // pas d'echo : on se tait
   if (duree==0) {
     pinMode(PIN_ECHO, OUTPUT);
     pinMode(PIN_ECHO, LOW);

@@ -95,14 +95,14 @@ void envoyerMesure(float x, float y, float cap, float angle, long cm) {
 }
 ```
 
-- Que des nombres sur la ligne, sans préfixe comme `D:` ; les lignes `D:`, `ACK:` et le reste continuent d'être
-  traitées comme avant.
+- The serial link accepts both `D:x,y,rotation,0,cm` and plain CSV. The Pi removes the
+  `D:` prefix before sending the row to the server. Leave `cm` empty for a sample without an echo.
 - La liaison à 9600 bauds est partagée avec les commandes moteur : reste sous ~20 lignes par seconde.
 
 ### 2. Depuis `robot.js` (Node, sur le Pi)
 
-Appelle `capteur.envoyer` là où ta mesure est prête, par exemple dans `onSensor`, qui reçoit les lignes `D:<cm>` de
-l'Arduino :
+For measurements produced directly on the Pi, call `capteur.envoyer` with a complete row.
+Arduino sonar frames already go through the serial parser.
 
 ```js
 capteur.envoyer([x, y, cap, angleCapteur, distanceCm]);   // distanceCm = null si pas d'écho
