@@ -64,3 +64,6 @@ server/push-tokens.json
 
 # Donnees du capteur recues du robot
 server/capteur/
+
+# Resultats des simulations sonar (CSV generes, cartes PNG)
+.simulation.ignore/

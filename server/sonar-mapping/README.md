@@ -59,6 +59,14 @@ Add `--format svg` to replay with SVG snapshots. An external mapper can also pub
 uv run --project server python server/sonar-mapping/simuler_robot.py --url http://localhost:3000 --code sonar-demo --accel 5
 ```
 
+Add `--scan` to have the simulator start and save a scan itself, the way **Start scan** and **Save scan** do in the app. It pairs a second socket as the pilot, so the app must not already be the pilot of that room. The server builds the map with `sonar_mapper`, and the simulator writes the PNG to `.simulation.ignore/carte-<scan>.png`.
+
+[simuler_drift.py](simuler_drift.py) runs offline. It drives the same tour with a fixed forward sensor and adds drift to the reported pose (odometry heading bias, scale error, wheel slip, direct x/y drift) or to the distances (bias or scale growing over time, random walk). It maps each example with `sonar_mapper.build_map` and scores the map against the true room. Results, including `donnees.csv` to replay against the server with `simuler_robot.py --csv … --scan`, go to `.simulation.ignore/drift/`. Git ignores `.simulation.ignore/`.
+
+```sh
+uv run --project server python server/sonar-mapping/simuler_drift.py
+```
+
 ## Sample data
 
 - [bench-wall.csv](samples/bench-wall.csv) uses the eight mean HC-SR04 distances published by the [Barkhausen Institut](https://www.barkhauseninstitut.org/research/lab-1/our-blog/distance-sensor-research). The source reports perpendicular measurements against a flat target. The CSV reconstructs the sensor positions from the reference distances by putting that target at X = 0 and the sensor on the negative X axis. This is a range replay along one line.

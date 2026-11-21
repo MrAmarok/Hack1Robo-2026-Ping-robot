@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import math
 import os
@@ -35,6 +36,9 @@ class Rect:
         coins = [(self.x0, self.y0), (self.x1, self.y0), (self.x1, self.y1), (self.x0, self.y1)]
         return [(*coins[i], *coins[(i + 1) % 4]) for i in range(4)]
 
+
+ICI = Path(__file__).resolve().parent
+SORTIES = ICI / ".simulation.ignore"
 
 PIECE = Rect("piece", 0.0, 0.0, 5.0, 4.0)
 OBSTACLES = [
@@ -372,6 +376,79 @@ def brancher_socketio(code: str, pseudo: str, cle: str | None, robot: Robot):
     return sio
 
 
+class ScanServeur:
+    def __init__(self, url: str, code: str, pseudo: str):
+        self.url, self.code, self.pseudo = url, code, pseudo
+        self.sio = socketio.AsyncClient(reconnection=False)
+        self.session: str | None = None
+
+    async def demarrer(self) -> bool:
+        role = asyncio.get_running_loop().create_future()
+        sio = self.sio
+
+        @sio.on("role_acces")
+        async def role_acces(data):
+            if not role.done():
+                role.set_result((data or {}).get("role"))
+
+        @sio.on("acces_demande")
+        async def acces_demande(data):
+            data = data or {}
+            await sio.emit("acces_reponse", {"id": data.get("id"), "accepte": True})
+            log(f"Scan : {data.get('pseudo', 'quelqu un')} rejoint le salon comme spectateur.")
+
+        try:
+            await sio.connect(self.url, transports=["websocket"],
+                              socketio_path=urlsplit(self.url).path.rstrip("/") + "/socket.io",
+                              wait_timeout=5)
+            await sio.call("pair", {"pseudo": self.pseudo, "code": self.code}, timeout=10)
+            obtenu = await asyncio.wait_for(role, 5)
+        except Exception as erreur:
+            log(f"Scan : connexion impossible ({erreur}), pas de scan.")
+            await self.fermer()
+            return False
+        if obtenu != "pilote":
+            log(f"Scan : quelqu'un est deja pilote du salon {self.code} (l'app ?), seul le pilote peut lancer "
+                "un scan. Ferme l'app et relance, ou fais Start scan / Save scan depuis l'app.")
+            await self.fermer()
+            return False
+        try:
+            statut = await sio.call("sonar_scan_start", {}, timeout=10)
+        except Exception as erreur:
+            log(f"Scan : pas de reponse a sonar_scan_start ({erreur}).")
+            await self.fermer()
+            return False
+        if statut.get("error") or not statut.get("session"):
+            log(f"Scan : refuse par le serveur ({statut.get('error')}).")
+            await self.fermer()
+            return False
+        self.session = statut["session"]
+        log(f"Scan : demarre (scan {self.session}), chaque mesure recue part aussi dans la carte.")
+        return True
+
+    async def enregistrer(self, fichier: Path | None) -> Path | None:
+        log("Scan : Save scan, le serveur calcule la carte...")
+        try:
+            resultat = await self.sio.call("sonar_scan_save", {"session": self.session}, timeout=120)
+        except Exception as erreur:
+            log(f"Scan : pas de reponse a sonar_scan_save ({erreur}).")
+            return None
+        if resultat.get("error") or resultat.get("mapError"):
+            log(f"Scan : pas de carte ({resultat.get('error') or resultat.get('mapError')}).")
+            return None
+        snapshot = resultat["snapshot"]
+        fichier = fichier or SORTIES / f"carte-{self.session}.png"
+        fichier.parent.mkdir(parents=True, exist_ok=True)
+        fichier.write_bytes(base64.b64decode(snapshot["image"]["data"]))
+        log(f"Scan : carte de {snapshot['readingCount']} mesures ({snapshot['resolutionM'] * 100:g} cm/pixel) "
+            f"ecrite dans {fichier.resolve()}.")
+        return fichier
+
+    async def fermer(self) -> None:
+        if self.sio.connected:
+            await self.sio.disconnect()
+
+
 def lire_csv(fichier: Path) -> list[str]:
     lignes = [l.strip() for l in fichier.read_text(encoding="utf-8-sig").splitlines()]
     return [l for l in lignes if l and not l.replace(" ", "").startswith("x_m,")]
@@ -383,6 +460,11 @@ async def simuler(args) -> int:
     if args.pilote:
         robot.mode = "pilote"
     session = args.session or time.strftime("sim-%Y%m%d-%H%M%S")
+    scan = None
+    if args.scan:
+        scan = ScanServeur(args.url, args.code, args.pseudo_scan)
+        if not await scan.demarrer():
+            return 1
     envoi = EnvoiCapteur(args.url, args.code, session, args.cle)
     fini = asyncio.Event()
     tache_envoi = asyncio.create_task(envoi.tourner(fini))
@@ -454,17 +536,29 @@ async def simuler(args) -> int:
         log(f"Capteur : le serveur a refuse la connexion : {erreur}")
         if sio is not None:
             await sio.disconnect()
+        if scan is not None:
+            await scan.fermer()
         return 1
     if sio is not None:
         await sio.disconnect()
 
     log(f"Termine : {envoi.envoyees} mesures, {envoi.acceptees} acceptees, {envoi.refusees} refusees, "
         f"{envoi.total_serveur} lignes dans la session {envoi.session}.")
+    if scan is not None:
+        carte = await scan.enregistrer(args.carte) if envoi.acceptees else None
+        await scan.fermer()
+        if carte is None:
+            return 1
+        print(f"\n  Carte : {carte.resolve()}\n"
+              "  Elle est aussi dans l'historique des scans de l'app (Indoor map).\n")
+        return 0
     if not envoi.acceptees:
         return 1
     base = args.url.rstrip("/")
-    print(f'\n  curl -o session.csv "{base}/capteur/{envoi.session}?code={args.code}"\n'
-          "  uv run --locked --script sonar-mapping/map_sonar.py session.csv carte.png\n")
+    dossier = os.path.relpath(SORTIES)
+    print(f'\n  curl --create-dirs -o {dossier}/{envoi.session}.csv "{base}/capteur/{envoi.session}?code={args.code}"\n'
+          f"  uv run --locked --script {os.path.relpath(ICI / 'map_sonar.py')} {dossier}/{envoi.session}.csv "
+          f"{dossier}/carte-{envoi.session}.png\n")
     return 0
 
 
@@ -484,9 +578,20 @@ def main() -> int:
     p.add_argument("--sans-bruit", action="store_true", help="mesures parfaites, sans bruit ni echo perdu")
     p.add_argument("--sans-socketio", action="store_true", help="n'ouvrir que le WebSocket capteur")
     p.add_argument("--graine", type=int, help="graine aleatoire pour des mesures reproductibles")
+    p.add_argument("--scan", action="store_true",
+                   help="faire Start scan / Save scan comme l'app et ecrire la carte calculee par le serveur")
+    p.add_argument("--carte", type=Path, help="fichier PNG de la carte avec --scan (defaut : .simulation.ignore/carte-<scan>.png)")
+    p.add_argument("--pseudo-scan", default="Pilote simule", help="pseudo du pilote qui lance le scan")
     args = p.parse_args()
     if args.accel <= 0 or args.frequence <= 0:
         p.error("--accel et --frequence doivent etre positifs")
+    if args.scan and socketio is None:
+        p.error("--scan a besoin de python-socketio (uv sync)")
+    if args.scan and args.pilote:
+        p.error("--scan prend la place du pilote, l'app ne pourrait plus conduire : "
+                "avec --pilote, fais Start scan / Save scan depuis l'app")
+    if args.carte and not args.scan:
+        p.error("--carte ne sert qu'avec --scan")
     if args.csv and not args.csv.is_file():
         p.error(f"fichier introuvable : {args.csv}")
     try:
