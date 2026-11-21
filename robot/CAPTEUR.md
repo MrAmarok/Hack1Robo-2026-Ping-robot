@@ -213,14 +213,3 @@ uv run --locked --script server/sonar-mapping/map_sonar.py session.csv carte.png
 
 Pour voir la carte se dessiner dans l'app, la carte sonar en direct affiche l'image que `map_sonar.py` écrit dans le
 fichier `SONAR_SNAPSHOT_FILE` ; la marche à suivre est dans `server/sonar-mapping/README.md`.
-
-## Limites et prochaines étapes
-
-- **La position vient de toi** : le robot ne connaît pas sa position (pas de capteur de rotation sur les roues).
-  `x_m`, `y_m` et `heading_deg` doivent être calculés par ton code, ou repérés au sol à la main pour une première
-  carte.
-- **Le firmware actuel ne mesure qu'une fois par seconde** (`D:<cm>` dans `rover_uart.ino`) et n'écrit rien quand il
-  n'y a pas d'écho : à changer si tu veux plus de mesures.
-- **Déploiement** : sur le VPS, nginx doit laisser passer les connexions WebSocket vers `/ping/ws/capteur`, et
-  `ROBOT_KEY` doit être identique sur le robot et le serveur si elle est utilisée.
-- **Accès aux fichiers** : le téléchargement ne demande que le code du salon, comme l'historique des alertes.
