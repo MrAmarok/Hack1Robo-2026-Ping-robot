@@ -204,6 +204,7 @@ const CONFIG = {
 
   // Synthese vocale ("le robot parle") via haut-parleur Bluetooth.
   TTS_ENABLE: String(process.env.TTS_ENABLE || 'true').toLowerCase() === 'true',
+  ALARM_BUZZER: String(process.env.ALARM_BUZZER || 'false').toLowerCase() === 'true',
   TTS_LANG: process.env.TTS_LANG || 'fr-FR',
   // MAC de la JBL appairee (bluetoothctl). Si vide -> sortie ALSA par defaut.
   SPEAKER_MAC: process.env.SPEAKER_MAC || '',
@@ -1274,10 +1275,12 @@ socket.on('connect', () => {
   setTimeout(() => {
     sendRobotStatus();
     announceRobotOnline();
+    if (CONFIG.ALARM_BUZZER && socket.connected) publishAlarmStatus(buzzerOn);
   }, 1000);
 });
 socket.on('disconnect', (reason) => {
   log(`Deconnecte (${reason}).`);
+  if (CONFIG.ALARM_BUZZER) stopBuzzer();
   stopSharing();
 });
 socket.on('connect_error', (err) => log('Erreur connexion:', err.message));
@@ -1482,6 +1485,7 @@ socket.on('robot_drive', async (p) => {
 socket.on('robot_status_request', (p) => {
   debugLog(`[ROBOT_STATUS_REQUEST][IN] by=${p?.by || '?'} arduinoConnected=${arduino.connected} fix=${!!lastFix}`);
   sendRobotStatus();
+  if (CONFIG.ALARM_BUZZER) publishAlarmStatus(buzzerOn);
 });
 socket.on('sync_batch', () => {});
 
@@ -1528,11 +1532,26 @@ async function chargerItineraire(depart, arrivee) {
 }
 let lastObstacleCm = null;
 let sensorSeen = false;
+let buzzerTimer = null;
+let buzzerOn = false;
+let buzzerLastReply = 0;
 
 const arduino = new Arduino({
   port: CONFIG.ARDUINO_PORT,
   baud: CONFIG.ARDUINO_BAUD,
   log,
+  onAlarm: (on) => {
+    if (!CONFIG.ALARM_BUZZER || !buzzerTimer) return;
+    if (!on) {
+      if (buzzerOn) stopBuzzer();
+      return;
+    }
+    buzzerLastReply = performance.now();
+    if (!buzzerOn) {
+      buzzerOn = true;
+      publishAlarmStatus(true);
+    }
+  },
   onSensor: (cm) => {
     lastObstacleCm = cm;
     if (!sensorSeen) {
@@ -3395,15 +3414,54 @@ socket.on('robot_mode', (p) => {
   sendRobotStatus();
 });
 
-socket.on('robot_alarme', (p) => {
-  const on = !!(p && p.on);
-  if (!tts) return;
+function publishAlarmStatus(on) {
+  if (socket.connected) socket.emit('robot_alarme_status', { code: CONFIG.CODE, on });
+}
+
+function stopBuzzer() {
+  clearInterval(buzzerTimer);
+  buzzerTimer = null;
+  buzzerOn = false;
+  arduino.send('A0');
+  publishAlarmStatus(false);
+}
+
+function startBuzzer() {
+  if (buzzerTimer) return;
+  if (!arduino.send('A1')) {
+    log('Alarm buzzer unavailable: Arduino serial write failed.');
+    publishAlarmStatus(false);
+    return;
+  }
+  buzzerLastReply = performance.now();
+  buzzerTimer = setInterval(() => {
+    if (performance.now() - buzzerLastReply >= 1500 || !arduino.send('A1')) {
+      log('Alarm buzzer stopped: Arduino stopped responding.');
+      stopBuzzer();
+    }
+  }, 500);
+}
+
+function setRobotAlarm(on, phrase) {
+  if (CONFIG.ALARM_BUZZER) {
+    if (on) startBuzzer();
+    else stopBuzzer();
+    return;
+  }
+  if (!tts) {
+    publishAlarmStatus(false);
+    return;
+  }
   if (on) {
-    tts.demarrerAlarme(p && p.texte).catch((e) => log('ALARME:', e.message));
+    tts.demarrerAlarme(phrase).catch((e) => log('ALARME:', e.message));
   } else {
     tts.arreterAlarme();
   }
-  socket.emit('robot_alarme_status', { code: CONFIG.CODE, on });
+  publishAlarmStatus(on);
+}
+
+socket.on('robot_alarme', (p) => {
+  setRobotAlarm(!!p?.on, p?.texte);
 });
 
 socket.on('robot_stop_all', () => {
@@ -3426,7 +3484,7 @@ socket.on('robot_stop_all', () => {
   rtArreter();
   // 5. l'alarme : c'est le bouton qu'on presse quand quelque chose tourne
   //    mal, et une sirene qu'on ne peut plus arreter en fait partie.
-  if (tts && tts.arreterAlarme()) log('Alarme coupee par l arret d urgence.');
+  setRobotAlarm(false);
   sendRobotStatus();
 });
 

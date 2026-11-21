@@ -6,12 +6,13 @@ const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 
 class Arduino {
-  constructor({ port, baud, log, onSensor, onPresence, onConnect }) {
+  constructor({ port, baud, log, onSensor, onPresence, onAlarm, onConnect }) {
     this.port = port;
     this.baud = baud;
     this.log = log || console.log;
     this.onSensor = onSensor || (() => {});
     this.onPresence = onPresence || (() => {});
+    this.onAlarm = onAlarm || (() => {});
     // Appele une fois la liaison serie ouverte : c'est le moment d'imposer
     // au firmware les reglages qu'on ne veut pas dependre de son demarrage.
     this.onConnect = onConnect || null;
@@ -51,6 +52,8 @@ class Arduino {
       } else if (line.startsWith('PRES:')) {
         // Le radar n'envoie que ses CHANGEMENTS d'etat.
         this.onPresence(line.slice(5).trim() === '1');
+      } else if (line === 'ALARM:0' || line === 'ALARM:1') {
+        this.onAlarm(line === 'ALARM:1');
       } else if (line) {
         this.log(`Arduino > ${line}`);
       }
@@ -92,8 +95,11 @@ class Arduino {
     // 'T' manquait : depuis que le tilt s'envoie en T<angle> et non plus en
     // U<angle>, deux demandes identiques d'affilee etaient avalees ici.
     const noDedupe = cmd === '+' || cmd === '-' || 'VPUTCK'.includes(cmd[0]);
-    if (cmd === this.lastCmd && !noDedupe) return true;
-    this.lastCmd = cmd;
+    // Buzzer renewals run independently of the motor command stream.
+    if (cmd !== 'A0' && cmd !== 'A1') {
+      if (cmd === this.lastCmd && !noDedupe) return true;
+      this.lastCmd = cmd;
+    }
     try {
       this.sp.write(cmd + '\n');
       return true;

@@ -85,6 +85,29 @@ Exemple complet :
 CODE=123456 PSEUDO=RobotBleu GPS_PORT=/dev/ttyUSB0 node robot.js
 ```
 
+## SFM-27 buzzer alarm
+
+The existing app alarm button controls the SFM-27 when the Pi runs with
+`ALARM_BUZZER=true`. The speaker alarm remains the default. Flash
+[`rover_uart.ino`](arduino/rover_uart/rover_uart.ino) and set
+`Environment=ALARM_BUZZER=true` in the Pi's service configuration, then restart
+the service. For a manual launch, set `ALARM_BUZZER=true` alongside `CODE`.
+
+Wire the buzzer as a low-side switched load.
+
+- Connect buzzer positive to the +12 V supply and buzzer negative to the MOSFET drain.
+- Connect the MOSFET source, supply negative and Arduino GND together.
+- Arduino A0 drives the gate driver input. Fit a 10 kΩ gate-to-source pull-down
+  to hold the switch off during reset. With the IRFZ44N, use a driver that
+  accepts the Arduino's 5 V signal and supplies a 10 V gate drive. Infineon
+  specifies the on-resistance at 10 V gate-to-source.
+  [IRFZ44N datasheet](https://www.infineon.com/assets/row/public/documents/24/49/infineon-irfz44n-datasheet-en.pdf)
+
+Long-press the app's alarm button to sound the buzzer. Tap it or use emergency
+stop to silence it. The Pi sends `A1` every 500 ms while the alarm is active
+and sends `A0` to stop it. The Arduino switches the buzzer off 1.5 seconds
+after the last renewal if the Pi or serial link fails.
+
 ## 5. Commandes au clavier (une fois lancé)
 
 ```

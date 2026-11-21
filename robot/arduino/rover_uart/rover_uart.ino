@@ -68,6 +68,7 @@
 //                    Direct, sans rampe : c'est la commande d'un regulateur
 //                    (maintien de cap), et une rampe le ferait osciller.
 //     I              reafficher READY:rover_uart
+//     A1 / A0        enable or disable the active buzzer, replies ALARM:<0|1>
 //
 //  CE QUE LE SKETCH ENVOIE DE LUI-MEME
 //     PRES:<0|1>     presence detectee par le radar (changements seulement)
@@ -100,6 +101,17 @@ const uint8_t PIN_TRIG = 12, PIN_ECHO = 2;
 // Sa logique est en 3,3 V : l'Arduino lit cela comme un niveau haut (seuil
 // a ~3,0 V), pas besoin d'adaptation.
 const uint8_t PIN_PRESENCE = 13;
+const uint8_t PIN_ALARM = A0;
+const uint32_t ALARM_TIMEOUT_MS = 1500;
+bool alarmOn = false;
+uint32_t alarmRenewedAt = 0;
+
+void setAlarm(bool on) {
+  alarmOn = on;
+  digitalWrite(PIN_ALARM, on ? HIGH : LOW);
+  Serial.print(F("ALARM:"));
+  Serial.println(on ? 1 : 0);
+}
 
 Servo s_rot, s_inc, s_cvg, s_cvd;
 
@@ -288,26 +300,15 @@ void distance_gerer() {
   digitalWrite(PIN_TRIG, LOW);
 
   unsigned long duree = pulseIn(PIN_ECHO, HIGH, 25000UL);
-  if (!duree) return;                 // pas d'echo : on se tait
-  if (duree==0) {
-    pinMode(echoPin, OUTPUT);
-    pinMode(echoPin, LOW);
-    delay(100);
-    pinMode(echoPin, INPUT);
-  } else {
-    long dist = duree * 17 / 100;               // vitesse du son, aller-retour
-    if (dist < 2 || dist > 400) return;     // hors des limites du capteur
-    String dist_str = String(dist)
-    return "0,0,0,0," + dist_str
-  }
-  // Serial.print(F("D:"));
-  // Serial.println(cm);
+  const unsigned long cm = duree / 58;
+  if (cm < 2 || cm > 400) return;
+  Serial.print(F("D:"));
+  Serial.println(cm);
 }
 
 // ---------------- protocole ----------------
 // Une commande = une lettre, suivie d'un nombre optionnel.
-// On repond TOUJOURS ACK:<lettre>, meme si la lettre est inconnue :
-// l'app ne doit jamais rester bloquee sur un timeout.
+// Legacy commands reply ACK:<letter>. Valid alarm commands reply ALARM:<0|1>.
 char    tampon[16];
 uint8_t n = 0;
 uint32_t dernier_ordre = 0, t_dernier_car = 0;
@@ -322,6 +323,12 @@ void executer(char *s) {
   bool chiffre = (s[1] >= '0' && s[1] <= '9');
   int  a = atoi(s + 1);
   switch (c) {
+    case 'A':
+      if ((s[1] == '0' || s[1] == '1') && s[2] == '\0') {
+        alarmRenewedAt = millis();
+        setAlarm(s[1] == '1');
+      }
+      return; // Alarm renewals must leave the motor watchdog untouched.
     case 'F': demarrer(+1); break;                // avant, en progressif
     case 'B': demarrer(-1); break;                // arriere, en progressif
     // Virages et stop : pleine puissance tout de suite, aucune rampe.
@@ -361,6 +368,8 @@ void executer(char *s) {
 }
 
 void setup() {
+  digitalWrite(PIN_ALARM, LOW);
+  pinMode(PIN_ALARM, OUTPUT);
   pinMode(EN_PONTS, OUTPUT); digitalWrite(EN_PONTS, LOW);
   const uint8_t p[4] = { G_RPWM, G_LPWM, D_RPWM, D_LPWM };
   for (uint8_t i = 0; i < 4; i++) { pinMode(p[i], OUTPUT); analogWrite(p[i], 0); }
@@ -396,6 +405,7 @@ void loop() {
   // On remet aussi la rampe a zero, pour que le prochain depart reparte
   // bien en douceur au lieu d'attaquer a la vitesse ou on s'etait arrete.
   if (millis() - dernier_ordre > 1500) { marche = 0; roues(0, 0); }
+  if (alarmOn && millis() - alarmRenewedAt >= ALARM_TIMEOUT_MS) setAlarm(false);
 
   rampe_gerer();
   tourelle_gerer();
