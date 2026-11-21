@@ -31,7 +31,15 @@ On NixOS, prefix the `uv` commands with `UV_PYTHON="$(command -v python3)"` to u
 
    For a phone on the same network, substitute the server computer's LAN address for `localhost`. The phone build must allow an HTTP connection to the development server. With the deployed Ping server, leave the Expo override unset and configure the snapshot file and room on that server.
 
-3. Enter a nickname and the shared code `sonar-demo`, click **S’APPARIER**, and open **Live sonar map**.
+3. Enter a nickname and the shared code `sonar-demo`, then click **S’APPARIER**. Once connected to the robot, expand **Camera** with **⛶** and tap **Live sonar map** in the guidance toolbar.
+
+   To try the replay without hardware, run this in another terminal from the repository root and leave it running while you pair.
+
+   ```sh
+   cd mobile
+   node -e 'const s = require("socket.io-client").io("http://localhost:3002"); s.on("connect", () => s.emit("pair", { code: "sonar-demo", pseudo: "Demo Robot", robot: true }));'
+   ```
+
 4. Start the replay.
 
    ```sh
