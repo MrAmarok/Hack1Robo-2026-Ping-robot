@@ -107,3 +107,17 @@ async def test_routes_http(serveur):
         assert (await http.get("/capteur/dl")).status_code == 400
         assert (await http.get("/capteur")).status_code == 400
         assert (await http.get("/ws/capteur", params={"code": code})).status_code == 426
+
+
+async def test_logs_du_serveur(serveur, capsys):
+    code = nouveau_code()
+    async with Robot(serveur, code=code, session="logs") as r:
+        await r.recevoir()
+        await r.envoyer("0,0,0,0,143\n0,0,0")
+        await asyncio.sleep(1.3)
+    await asyncio.sleep(0.3)
+    sortie = capsys.readouterr().out
+    assert f"[CAPTEUR] {code} : robot connecte depuis 127.0.0.1" in sortie
+    assert "message recu, 1 ligne(s) acceptee(s), 1 refusee(s), total 1 - derniere : 0,0,0,0,143" in sortie
+    assert "resume 1 s -> 1 message(s), 1 ligne(s) acceptee(s), 1 refusee(s), total 1" in sortie
+    assert "robot deconnecte (session logs, 1 ligne(s) recue(s) pendant cette connexion, 1 au total" in sortie

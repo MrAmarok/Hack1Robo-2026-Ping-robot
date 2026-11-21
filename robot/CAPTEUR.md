@@ -183,8 +183,13 @@ dans le fichier du serveur.
 | Terminal de `robot.js` | `capteur session` | commence une nouvelle session (nouveau fichier) |
 | Logs du robot | `Capteur: connecte au serveur, session …` | la connexion est ouverte |
 | Logs du robot | `Capteur: N ligne(s) refusee(s) par le serveur : […]` | le format est faux ; la raison est donnée |
-| Logs du serveur | `[CAPTEUR] 1234 : robot connecte, session …` | le serveur voit le robot |
+| Logs du serveur | `[CAPTEUR] 1234 : robot connecte depuis 192.168.1.20:36942, session …` | le serveur voit le robot (et d'où il se connecte) |
+| Logs du serveur | `[CAPTEUR] 1234 : message recu, 2 ligne(s) acceptee(s), 0 refusee(s), total 120 - derniere : 0,0,0,0,143` | un message par envoi du robot (jusqu'à 5 par seconde) |
+| Logs du serveur | `[CAPTEUR] 1234 : resume 1 s -> 5 message(s), 10 ligne(s) acceptee(s), 0 refusee(s), total 120` | le bilan de chaque seconde |
+| Logs du serveur | `[CAPTEUR] 1234 : robot deconnecte (session …, 18 ligne(s) recue(s) pendant cette connexion, …)` | fin de connexion, avec sa durée |
+| Logs du serveur | `[CAPTEUR] connexion refusee depuis … : cle robot invalide` | un robot ou programme refusé, et pourquoi |
 | Serveur | `tail -f server/capteur/1234/<session>.csv` | les lignes arrivent en direct |
+| Serveur | `uv run ping-server 2>&1 \| grep --line-buffered CAPTEUR` | seulement les logs du capteur |
 | Serveur | `curl "http://localhost:3000/capteur?code=1234"` | sessions et nombre de lignes |
 
 Quand `robot.js` tourne en service systemd, son terminal n'accepte pas de commandes ; les logs se lisent avec

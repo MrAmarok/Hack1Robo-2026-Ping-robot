@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
@@ -29,6 +30,7 @@ async def capteur_en_http():
 @router.websocket("/ws/capteur")
 async def capteur_ws(ws: WebSocket):
     await ws.accept()
+    origine = f"{ws.client.host}:{ws.client.port}" if ws.client else "?"
     code = _code(ws.query_params.get("code"))
     session = ws.query_params.get("session") or None
     erreur = ("code requis" if not code
@@ -36,14 +38,19 @@ async def capteur_ws(ws: WebSocket):
               else "session invalide ([A-Za-z0-9_-], 64 caracteres max)" if session and not capteur.id_valide(session)
               else None)
     if erreur:
+        log(f"[CAPTEUR] connexion refusee depuis {origine} : {erreur}.")
         await ws.send_json({"type": "erreur", "erreur": erreur})
         await ws.close(code=1008)
         return
 
     session = session or capteur.nouvelle_session(code)
     total = await asyncio.to_thread(capteur.compter, code, session)
-    log(f"[CAPTEUR] {code} : robot connecte, session {session} ({total} lignes deja recues).")
+    debut = time.monotonic()
+    recues_connexion = 0
+    stats = {"messages": 0, "lignes": 0, "refusees": 0, "total": total}
+    log(f"[CAPTEUR] {code} : robot connecte depuis {origine}, session {session} ({total} lignes deja recues).")
     await ws.send_json({"type": "bonjour", "code": code, "session": session, "lignes": total})
+    resume = asyncio.ensure_future(_resume_par_seconde(code, stats))
     try:
         while True:
             message = await ws.receive()
@@ -57,9 +64,18 @@ async def capteur_ws(ws: WebSocket):
                 try:
                     total = capteur.ajouter(code, session, valides)
                 except capteur.TropVolumineux as e:
+                    log(f"[CAPTEUR] {code} : session {session} refusee ({e}), connexion fermee.")
                     await ws.send_json({"type": "erreur", "erreur": str(e)})
                     await ws.close(code=1009)
                     return
+            recues_connexion += len(valides)
+            stats["messages"] += 1
+            stats["lignes"] += len(valides)
+            stats["refusees"] += len(erreurs)
+            stats["total"] = total
+            derniere = valides[-1] if valides else "-"
+            log(f"[CAPTEUR] {code} : message recu, {len(valides)} ligne(s) acceptee(s), "
+                f"{len(erreurs)} refusee(s), total {total} - derniere : {derniere}")
             accuse = {"type": "ack", "recues": len(valides), "rejetees": len(erreurs), "total": total}
             if erreurs:
                 accuse["erreurs"] = erreurs[:MAX_ERREURS]
@@ -68,7 +84,20 @@ async def capteur_ws(ws: WebSocket):
     except (WebSocketDisconnect, RuntimeError):
         pass
     finally:
-        log(f"[CAPTEUR] {code} : robot deconnecte (session {session}, {total} lignes).")
+        resume.cancel()
+        duree = round(time.monotonic() - debut)
+        log(f"[CAPTEUR] {code} : robot deconnecte (session {session}, {recues_connexion} ligne(s) recue(s) "
+            f"pendant cette connexion, {total} au total, connecte {duree} s).")
+
+
+async def _resume_par_seconde(code: str, stats: dict) -> None:
+    while True:
+        await asyncio.sleep(1)
+        if not stats["messages"]:
+            continue
+        log(f"[CAPTEUR] {code} : resume 1 s -> {stats['messages']} message(s), {stats['lignes']} ligne(s) "
+            f"acceptee(s), {stats['refusees']} refusee(s), total {stats['total']}")
+        stats.update(messages=0, lignes=0, refusees=0)
 
 
 @router.get("/capteur", **DOC["liste"])
