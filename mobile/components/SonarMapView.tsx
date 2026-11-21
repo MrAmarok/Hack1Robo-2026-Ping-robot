@@ -1,4 +1,4 @@
-import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 
@@ -12,7 +12,6 @@ export type SonarSnapshot = {
 };
 
 type Props = {
-  visible: boolean;
   connected: boolean;
   snapshot: SonarSnapshot | null;
   onClose: () => void;
@@ -24,7 +23,7 @@ const legend = [
   { label: 'Unknown', color: '#A0A0A0' },
 ];
 
-export function SonarMapView({ visible, connected, snapshot, onClose }: Props) {
+export function SonarMapView({ connected, snapshot, onClose }: Props) {
   const { height } = useWindowDimensions();
   const status = connected
     ? 'Waiting for sonar readings from your pairing room.'
@@ -37,58 +36,56 @@ export function SonarMapView({ visible, connected, snapshot, onClose }: Props) {
       : undefined;
 
   return (
-    <Modal visible={visible} animationType="none" onRequestClose={onClose}>
-      <SafeAreaView style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.header}>
-            <Text accessibilityRole="header" style={styles.title}>Live sonar map</Text>
-            <Pressable accessibilityRole="button" onPress={onClose} style={styles.close}>
-              <Text style={styles.closeLabel}>Close</Text>
-            </Pressable>
-          </View>
+    <SafeAreaView style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text accessibilityRole="header" style={styles.title}>Live sonar map</Text>
+          <Pressable accessibilityRole="button" onPress={onClose} style={styles.close}>
+            <Text style={styles.closeLabel}>Close</Text>
+          </Pressable>
+        </View>
 
-          <View style={[styles.canvas, { height: Math.max(200, Math.min(height * 0.55, 540)) }]}>
-            {uri ? (
-              <Image
-                accessibilityLabel="Sonar occupancy grid"
-                resizeMode="contain"
-                source={{ uri }}
-                style={styles.map}
-              />
-            ) : image?.format === 'svg' ? (
-              <SvgXml accessibilityLabel="Sonar occupancy grid" xml={image.data} width="100%" height="100%" />
-            ) : (
-              <Text style={styles.empty}>{status}</Text>
-            )}
-          </View>
-
-          <View style={styles.legend}>
-            {legend.map(({ label, color }) => (
-              <View key={label} style={styles.legendItem}>
-                <View style={[styles.swatch, { backgroundColor: color }]} />
-                <Text style={styles.label}>{label}</Text>
-              </View>
-            ))}
-          </View>
-
-          {snapshot && (
-            <View style={styles.details}>
-              <Text style={styles.label}>
-                {snapshot.readingCount} / {snapshot.totalReadings} readings
-                {snapshot.readingCount === snapshot.totalReadings ? ' · Replay complete' : ''}
-              </Text>
-              <Text style={styles.label}>
-                {snapshot.resolutionM * 100} cm per cell
-              </Text>
-              <Text style={styles.label}>
-                Updated {new Date(snapshot.updatedAt).toLocaleTimeString()}
-                {!connected ? ' · Disconnected' : ''}
-              </Text>
-            </View>
+        <View style={[styles.canvas, { height: Math.max(200, Math.min(height * 0.55, 540)) }]}>
+          {uri ? (
+            <Image
+              accessibilityLabel="Sonar occupancy grid"
+              resizeMode="contain"
+              source={{ uri }}
+              style={styles.map}
+            />
+          ) : image?.format === 'svg' ? (
+            <SvgXml accessibilityLabel="Sonar occupancy grid" xml={image.data} width="100%" height="100%" />
+          ) : (
+            <Text style={styles.empty}>{status}</Text>
           )}
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
+        </View>
+
+        <View style={styles.legend}>
+          {legend.map(({ label, color }) => (
+            <View key={label} style={styles.legendItem}>
+              <View style={[styles.swatch, { backgroundColor: color }]} />
+              <Text style={styles.label}>{label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {snapshot && (
+          <View style={styles.details}>
+            <Text style={styles.label}>
+              {snapshot.readingCount} / {snapshot.totalReadings} readings
+              {snapshot.readingCount === snapshot.totalReadings ? ' · Replay complete' : ''}
+            </Text>
+            <Text style={styles.label}>
+              {snapshot.resolutionM * 100} cm per cell
+            </Text>
+            <Text style={styles.label}>
+              Updated {new Date(snapshot.updatedAt).toLocaleTimeString()}
+              {!connected ? ' · Disconnected' : ''}
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

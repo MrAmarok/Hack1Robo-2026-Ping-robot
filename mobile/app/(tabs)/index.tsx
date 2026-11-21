@@ -3409,14 +3409,6 @@ ${tk.slice(0, 32)}…`);
           </Text>
         </View>
 
-        <PrimaryButton
-          label="Live sonar map"
-          onPress={() => {
-            setSonarOpen(true);
-            socketRef.current?.emit('sonar_map_request');
-          }}
-        />
-
         {/* === Mode de surveillance === */}
         {/* Premier element de la page : c'est la question a laquelle on repond
             en ouvrant l'app quand on part de chez soi. */}
@@ -3753,23 +3745,26 @@ ${tk.slice(0, 32)}…`);
         )}
       </View>
 
-      <SonarMapView
-        visible={sonarOpen}
-        connected={socketOnline}
-        snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
-        onClose={() => setSonarOpen(false)}
-      />
-
       {/* ======== TUTORIEL (MODAL) ======== */}
       {/* === Camera plein ecran + commandes de pilotage === */}
       <Modal
-        visible={camFullscreen}
+        visible={camFullscreen || sonarOpen}
         animationType="fade"
         statusBarTranslucent
         supportedOrientations={['portrait', 'landscape']}
-        onRequestClose={() => setCamFullscreen(false)}
+        onRequestClose={() => {
+          if (sonarOpen) setSonarOpen(false);
+          else setCamFullscreen(false);
+        }}
       >
-        <View style={styles.fsRoot} {...pinchResponder.panHandlers}>
+        {sonarOpen && (
+          <SonarMapView
+            connected={socketOnline}
+            snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
+            onClose={() => setSonarOpen(false)}
+          />
+        )}
+        <View style={[styles.fsRoot, sonarOpen && styles.fsHidden]} {...pinchResponder.panHandlers}>
           {rtcStreamUrl && webrtc ? (
             // contain = on voit TOUTE l'image (plus de rognage) ; le zoom
             // eventuel est applique par-dessus (boutons +/- ou pincement).
@@ -3799,6 +3794,16 @@ ${tk.slice(0, 32)}…`);
                 onPress={() => setCamFullscreen(false)}
               >
                 <Text style={styles.camPadSymbol}>✕</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={[styles.camPadSpeedBtn, styles.fsSonarBtn]}
+                onPress={() => {
+                  setSonarOpen(true);
+                  socketRef.current?.emit('sonar_map_request');
+                }}
+              >
+                <Text style={styles.fsSonarLabel}>Live sonar map</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.camPadSpeedBtn, listening && styles.fsAudioOn]}
@@ -5207,6 +5212,9 @@ const styles = StyleSheet.create({
   camPadGroupCol: { gap: 12, alignItems: 'center' },
   // Camera plein ecran
   fsRoot: { flex: 1, backgroundColor: '#000' },
+  fsHidden: { display: 'none' },
+  fsSonarBtn: { width: 'auto', paddingHorizontal: 10 },
+  fsSonarLabel: { color: HUD.TEXTE, fontSize: 12, fontWeight: '800' },
   fsImage: { ...StyleSheet.absoluteFillObject },
   fsWait: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   fsTopRow: {
