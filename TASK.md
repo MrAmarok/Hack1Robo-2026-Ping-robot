@@ -7,7 +7,7 @@
 
 - Branchement traitement -  Pauline
 - Synchronisation des plans 2D (récupérer les données de parcours afin de créer une carte initiale)-> Tom (SlamPY)
-- Orderring Server -> Marc 
+- Orderring Server -> Marc
 
 ## Récupération des données
 
