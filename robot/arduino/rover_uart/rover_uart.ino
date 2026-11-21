@@ -290,15 +290,15 @@ void distance_gerer() {
   unsigned long duree = pulseIn(PIN_ECHO, HIGH, 25000UL);
   if (!duree) return;                 // pas d'echo : on se tait
   if (duree==0) {
-    pinMode(echoPin, OUTPUT);
-    pinMode(echoPin, LOW);
+    pinMode(PIN_ECHO, OUTPUT);
+    pinMode(PIN_ECHO, LOW);
     delay(100);
-    pinMode(echoPin, INPUT);
+    pinMode(PIN_ECHO, INPUT);
   } else {
     long dist = duree * 17 / 100;               // vitesse du son, aller-retour
     if (dist < 2 || dist > 400) return;     // hors des limites du capteur
     Serial.print("0,0,0,0,");
-    Serial.println(distance);
+    Serial.println(dist);
   }
   // Serial.print(F("D:"));
   // Serial.println(cm);
