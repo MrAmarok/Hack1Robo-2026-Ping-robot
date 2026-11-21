@@ -41,6 +41,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { loadNativeMaps } from '@/components/nativeMaps';
 
 // ========================
 // Constantes & config
@@ -469,6 +470,10 @@ async function rangerVideoDansGalerie(nom: string, mo?: number) {
 let raisonJetonAbsent: string | null = null;
 
 async function ensureExpoPushToken(interactive = false): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    raisonJetonAbsent = 'Expo push notifications are unavailable on web';
+    return null;
+  }
   raisonJetonAbsent = null;
   try {
     // On redemande TOUJOURS un jeton frais : Android le remplace de lui-meme
@@ -847,11 +852,8 @@ export default function App() {
   }, [listening, rtcAudioLive]);
 
   // Carte lazy
-  const [mapLibLoaded, setMapLibLoaded] = useState(false);
-  const MapRef = useRef<{ MapView?: any; Marker?: any; Polyline?: any } | null>(
-    null
-  );
-  const robotMapRef = useRef<any>(null);
+  const [maps, setMaps] = useState<ReturnType<typeof loadNativeMaps>>(null);
+  const robotMapRef = useRef<import('react-native-maps').default>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -994,12 +996,6 @@ export default function App() {
       if (!effectivePseudo || !effectiveCode) return;
       pushRobotLog(`pair emit pseudo=${effectivePseudo} code=${effectiveCode}`);
 
-      // Pas de garde sur canNotifyRef ici : il vaut false tant que la
-      // verification asynchrone des permissions n'a pas fini, et la socket se
-      // connecte souvent avant. ensureExpoPushToken verifie lui-meme les
-      // permissions et rend null si elles manquent — le garde ne servait qu'a
-      // rater l'enregistrement une fois sur deux.
-      const token = await ensureExpoPushToken(false)
       const since = await getLastSeen();
       s.emit('pair', {
         pseudo: effectivePseudo,
@@ -1024,7 +1020,9 @@ export default function App() {
         plateforme: Platform.OS,
         version: Platform.Version,
       });
+      s.emit('sync', { code: effectiveCode, since });
 
+      const token = await ensureExpoPushToken(false);
       if (!token) {
         // Dire POURQUOI, et au serveur : c'est le seul endroit que je peux lire.
         s.emit('app_diag', {
@@ -1055,8 +1053,6 @@ export default function App() {
           console.log('Erreur /register-token', e);
         }
       }
-      s.emit('sync', { code: effectiveCode, since });
-
       const last = await AsyncStorage.getItem('lastBgLocation');
       if (last) {
         try {
@@ -1494,18 +1490,7 @@ export default function App() {
       await shareMyLocationOnce();
       await setLastSeenNow();
 
-      // Charger la lib de maps après accept (lazy & safe)
-      try {
-        const maps = require('react-native-maps');
-        MapRef.current = {
-          MapView: maps.default,
-          Marker: maps.Marker,
-          Polyline: maps.Polyline,
-        };
-        setMapLibLoaded(true);
-      } catch {
-        setMapLibLoaded(false);
-      }
+      setMaps(loadNativeMaps());
     });
 
     s.on('meet_declined', async (payload: { by?: string }) => {
@@ -2431,19 +2416,8 @@ export default function App() {
   // Charger la lib de carte des qu'on est appaire (pour la carte robot,
   // sans attendre un "Se rejoindre").
   useEffect(() => {
-    if (!pairedWith || mapLibLoaded) return;
-    try {
-      const maps = require('react-native-maps');
-      MapRef.current = {
-        MapView: maps.default,
-        Marker: maps.Marker,
-        Polyline: maps.Polyline,
-      };
-      setMapLibLoaded(true);
-    } catch {
-      setMapLibLoaded(false);
-    }
-  }, [pairedWith, mapLibLoaded]);
+    if (pairedWith && !maps) setMaps(loadNativeMaps());
+  }, [pairedWith, maps]);
 
   // Suivre le robot : recentrer la carte a chaque nouvelle position.
   const robotLat = robotStatus?.coords?.latitude;
@@ -2911,13 +2885,15 @@ export default function App() {
       'pair',
       JSON.stringify({ code: pairCode.trim(), pseudo: pseudo.trim() })
     );
-    const token = await ensureExpoPushToken(false);
     const since = await getLastSeen();
     socketRef.current.emit('pair', {
       pseudo: pseudo.trim(),
       code: pairCode.trim(),
       lastSeen: since,
     });
+    socketRef.current.emit('sync', { code: pairCode.trim(), since });
+
+    const token = await ensureExpoPushToken(false);
     if (token) {
       try {
         const sid = socketRef.current.id;
@@ -2930,7 +2906,6 @@ export default function App() {
         }
       } catch {}
     }
-    socketRef.current.emit('sync', { code: pairCode.trim(), since });
   };
 
   const onUnpair = async () => {
@@ -3273,10 +3248,6 @@ export default function App() {
       ? Math.max(0, Math.min(100, Math.round((1 - remainingDist / destStartDist) * 100)))
       : 0;
 
-  const MapView = MapRef.current?.MapView;
-  const Marker = MapRef.current?.Marker;
-  const Polyline = MapRef.current?.Polyline;
-
   // ========================
   // UI (aucun Fragment stylé)
   // ========================
@@ -3313,6 +3284,7 @@ export default function App() {
           style={styles.input}
         />
 
+        {Platform.OS !== 'web' && (
         <View style={{ backgroundColor: '#0B1016', borderRadius: 12, padding: 12, marginTop: 8 }}>
           <Text style={{ color: '#E8FFF8', fontWeight: '700', marginBottom: 6 }}>
             Notifications (optionnel)
@@ -3403,6 +3375,7 @@ ${tk.slice(0, 32)}…`);
             </TouchableOpacity>
           )}
         </View>
+        )}
 
             <PrimaryButton label="S’APPARIER" onPress={onPair} />
           </>
@@ -3682,14 +3655,14 @@ ${tk.slice(0, 32)}…`);
               )}
             </View>
 
-            {!robotCoord ? (
+            {Platform.OS === 'web' ? (
+              <Text style={{ color: '#7C9C93' }}>Open the mobile app to view the map.</Text>
+            ) : !robotCoord ? (
               <Text style={{ color: '#7C9C93' }}>
                 En attente d&apos;un fix GPS du robot…
               </Text>
-            ) : !mapLibLoaded ? (
-              <Text style={{ color: '#7C9C93' }}>Chargement de la carte…</Text>
-            ) : MapView ? (
-              <MapView
+            ) : maps ? (
+              <maps.default
                 ref={robotMapRef}
                 style={[styles.map, { height: mapH }]}
                 initialRegion={robotRegion}
@@ -3708,14 +3681,14 @@ ${tk.slice(0, 32)}…`);
                   setDestStartDist(robotCoord ? distanceMeters(robotCoord, c) : null);
                 }}
               >
-                <Marker
+                <maps.Marker
                   coordinate={robotCoord}
                   title="Robot"
                   description={formatCoord(robotCoord)}
                   pinColor="#00E5A0"
                 />
                 {myCoord && (
-                  <Marker
+                  <maps.Marker
                     coordinate={myCoord}
                     title="Moi"
                     description="Ta position"
@@ -3723,7 +3696,7 @@ ${tk.slice(0, 32)}…`);
                   />
                 )}
                 {destination && (
-                  <Marker
+                  <maps.Marker
                     coordinate={{
                       latitude: destination.latitude,
                       longitude: destination.longitude,
@@ -3733,14 +3706,14 @@ ${tk.slice(0, 32)}…`);
                     pinColor="#FFB020"
                   />
                 )}
-                {Polyline && routeCoords.length > 1 && (
-                  <Polyline
+                {routeCoords.length > 1 && (
+                  <maps.Polyline
                     coordinates={routeCoords}
                     strokeWidth={4}
                     strokeColor="#FFB020"
                   />
                 )}
-              </MapView>
+              </maps.default>
             ) : (
               <Text style={{ color: '#7C9C93' }}>Carte indisponible.</Text>
             )}
