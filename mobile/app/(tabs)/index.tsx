@@ -3792,7 +3792,7 @@ ${tk.slice(0, 32)}…`);
           )}
 
           {/* Barre du haut : fermer / audio / temoin robot / vitesse */}
-          <View style={styles.fsTopRow} pointerEvents="box-none">
+          <View style={styles.fsTopRow}>
             <View style={styles.fsSpeedGroup}>
               <TouchableOpacity
                 style={styles.camPadSpeedBtn}
@@ -4006,7 +4006,7 @@ ${tk.slice(0, 32)}…`);
               ordres d'un spectateur — ceci evite surtout de lui presenter des
               boutons qui ne feraient rien. */}
           {rtActif && (
-            <View style={styles.fsVeilleBandeau} pointerEvents="none">
+            <View style={styles.fsVeilleBandeau}>
               <Text style={styles.fsVeilleTexte}>
                 {rtEveille
                   ? 'SOLANA ECOUTE'
@@ -4015,14 +4015,14 @@ ${tk.slice(0, 32)}…`);
             </View>
           )}
           {!estPilote && (
-            <View style={styles.fsRoleBandeau} pointerEvents="none">
+            <View style={styles.fsRoleBandeau}>
               <Text style={styles.fsRoleTexte}>
                 {role === 'attente' ? 'EN ATTENTE D ACCEPTATION' : 'SPECTATEUR, CAMERA SEULE'}
               </Text>
             </View>
           )}
           {estPilote && (
-          <View style={styles.fsBottomRow} pointerEvents="box-none">
+          <View style={styles.fsBottomRow}>
             {/* Pouce gauche : la direction. */}
             <View style={styles.camPadGroupRow}>
               <TouchableOpacity
@@ -4308,7 +4308,7 @@ function CamPanTiltPad({
   // la barre du haut, qui ne croise aucune commande de pilotage.
   if (fullscreen) {
     return (
-      <View style={styles.camPtBarFs} pointerEvents="box-none">
+      <View style={styles.camPtBarFs}>
         <Text style={styles.camPtTitle}>🎥</Text>
         {arrow('◀', +1, 0)}
         {arrow('▲', 0, +1)}
@@ -4322,7 +4322,7 @@ function CamPanTiltPad({
   }
 
   return (
-    <View style={styles.camPtPad} pointerEvents="box-none">
+    <View style={styles.camPtPad}>
       <Text style={styles.camPtTitle}>🎥</Text>
       {arrow('▲', 0, +1)}
       <View style={styles.camPtRow}>
@@ -4608,11 +4608,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
     marginVertical: 8,
-    shadowColor: HUD.ACCENT,
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
+    ...Platform.select({
+      web: { boxShadow: `0 0 12px ${HUD.ACCENT}80` },
+      default: {
+        shadowColor: HUD.ACCENT,
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 6,
+      },
+    }),
   },
   primaryBtnText: {
     color: HUD.FOND,
@@ -4769,6 +4774,7 @@ const styles = StyleSheet.create({
   appelActif: { color: HUD.ACCENT, fontWeight: '700' },
   camPadGroupRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   fsVeilleBandeau: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: 96,
     alignSelf: 'center',
@@ -4781,6 +4787,7 @@ const styles = StyleSheet.create({
   },
   fsVeilleTexte: { color: HUD.ACCENT, fontWeight: '900', fontSize: 10.5, letterSpacing: 1.4 },
   fsRoleBandeau: {
+    pointerEvents: 'none',
     position: 'absolute',
     bottom: 18,
     alignSelf: 'center',
@@ -5203,6 +5210,7 @@ const styles = StyleSheet.create({
   fsImage: { ...StyleSheet.absoluteFillObject },
   fsWait: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   fsTopRow: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     top: 46,
     left: 14,
@@ -5217,6 +5225,7 @@ const styles = StyleSheet.create({
   fsAudioOn: { backgroundColor: 'rgba(255,59,92,0.7)', borderColor: 'rgba(255,90,110,0.6)' },
   fsZoomText: { color: '#E8FFF8', fontWeight: '900', fontSize: 12 },
   fsBottomRow: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     bottom: 28,
     left: 14,
@@ -5310,6 +5319,7 @@ const styles = StyleSheet.create({
   camPadSymbol: { color: '#E8FFF8', fontWeight: '900', fontSize: 22, lineHeight: 24 },
   // Pad pan-tilt camera (surimpression en haut a gauche de l'image)
   camPtPad: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     top: 8,
     left: 8,
@@ -5320,6 +5330,7 @@ const styles = StyleSheet.create({
   // Horizontale et non plus en colonne : en paysage la colonne descendait
   // jusque sur le joystick de pilotage.
   camPtBarFs: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     // 130 : laisse la place a une rangee du haut sur DEUX lignes. Le
     // chevauchement observe le 24/09 venait de cette marge trop courte.
