@@ -5,9 +5,9 @@
 
 ## Tâches
 
-- Vérifier le fonctionnement de la collision
-- Synchronisation des plans 2D (récupérer les données de parcours afin de créer une carte initiale)
-- Traiter le signal reçu et bloquer le robot en cas d'obstacle initial
+- Branchement traitement -  Pauline
+- Synchronisation des plans 2D (récupérer les données de parcours afin de créer une carte initiale)-> Tom (SlamPY)
+- Orderring Server -> Marc
 
 ## Récupération des données
 

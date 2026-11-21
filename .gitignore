@@ -49,9 +49,15 @@ google-services.json
 GoogleService-Info.plist
 
 # Sorties de compilation natives (regenerees par expo prebuild / gradle)
-/android/
-/ios/
-/build/
+/mobile/android/
+/mobile/ios/
+/mobile/build/
 
 # Binaires telecharges
 *.exe
+
+# Serveur Python
+server/.venv/
+__pycache__/
+.pytest_cache/
+server/push-tokens.json
