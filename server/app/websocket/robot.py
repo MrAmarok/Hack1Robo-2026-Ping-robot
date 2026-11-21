@@ -82,10 +82,11 @@ async def _drive(sid, data):
 
 @on("robot_drive")
 async def _robot_drive(sid, data):
-    """Ancien canal, garde pour les versions de l'app qui ne connaissent pas `drive`."""
-    if await refuse_si_pas_pilote(sid, "robot_drive", data):
-        return
+    """Relay commands to robots that support the robot_drive event."""
     p = payload(data)
+    feedback = p.get("feedback") is not False
+    if await refuse_si_pas_pilote(sid, "robot_drive", data, prevenir=feedback):
+        return
     sender = users.get(sid)
     cmd = str(p.get("cmd") or "").strip().upper()
     cmd_id = str(p.get("id") or f"{cmd}-{now_ms()}")
@@ -103,6 +104,8 @@ async def _robot_drive(sid, data):
     robot = robot_du_salon(code)
     if not robot:
         robot_log(f"[ROBOT_DRIVE][NO_ROBOT] id={cmd_id} code={code}")
+        if not feedback:
+            return
         await emit_to(
             sid,
             "robot_drive_status",
@@ -119,9 +122,10 @@ async def _robot_drive(sid, data):
     await emit_to(robot, "robot_drive", {"id": cmd_id, "cmd": cmd, "by": sender["pseudo"]})
     log_room_event(code, "robot_drive", {"cmd": cmd, "by": sender["pseudo"]})
     robot_log(f"[ROBOT_DRIVE][EMIT] id={cmd_id} cmd={cmd} by={sender['pseudo']} -> {robot}")
-    await emit_to(
-        sid, "robot_drive_confirmation", {"id": cmd_id, "ok": True, "cmd": cmd}
-    )
+    if feedback:
+        await emit_to(
+            sid, "robot_drive_confirmation", {"id": cmd_id, "ok": True, "cmd": cmd}
+        )
 
 
 @on("robot_drive_status")

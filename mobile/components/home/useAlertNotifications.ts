@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
-import { ROBOT_ONLINE_BUZZ_PREFIX, ROBOT_ACK_BUZZ_PREFIX, ROBOT_DRIVE_LABELS } from './presets';
-import type { RobotDriveCommand } from './types';
+import { ROBOT_ONLINE_BUZZ_PREFIX, ROBOT_ACK_BUZZ_PREFIX } from './presets';
 import { Vibration } from 'react-native';
 import { STRONG_VIBRATION_PATTERN } from './config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,8 +11,6 @@ type AlertNotificationsOptions = {
   pushRobotLog: (text: string) => void;
   robotLastSeenAtRef: React.RefObject<number>;
   setRobotHeartbeat: React.Dispatch<React.SetStateAction<string>>;
-  setRobotCommandStatus: React.Dispatch<React.SetStateAction<string>>;
-  pendingRobotCmdRef: React.RefObject<{ id: string; cmd: RobotDriveCommand; } | null>;
   setCameraOn: React.Dispatch<React.SetStateAction<boolean>>;
   setCamFullscreen: React.Dispatch<React.SetStateAction<boolean>>;
   setListening: React.Dispatch<React.SetStateAction<boolean>>;
@@ -30,8 +27,6 @@ export function useAlertNotifications({
   pushRobotLog,
   robotLastSeenAtRef,
   setRobotHeartbeat,
-  setRobotCommandStatus,
-  pendingRobotCmdRef,
   setCameraOn,
   setCamFullscreen,
   setListening,
@@ -50,22 +45,10 @@ export function useAlertNotifications({
         pushRobotLog(`notification robot online body=${body}`);
         robotLastSeenAtRef.current = Date.now();
         setRobotHeartbeat(new Date().toLocaleTimeString());
-        setRobotCommandStatus('Robot en ligne (notification)');
         return;
       }
       if (body.startsWith(ROBOT_ACK_BUZZ_PREFIX)) {
         pushRobotLog(`notification robot ack body=${body}`);
-        const parts = body.split(':');
-        const idRaw = parts.length >= 4 ? parts[1] : 'legacy';
-        const cmdRaw = parts.length >= 4 ? parts[2] : parts[1] || '';
-        const statusRaw = parts.length >= 4 ? parts[3] : parts[2] || '';
-        const cmd = cmdRaw as RobotDriveCommand;
-        pendingRobotCmdRef.current = null;
-        setRobotCommandStatus(
-          statusRaw === 'OK'
-            ? `Robot OK notification: ${ROBOT_DRIVE_LABELS[cmd] || cmdRaw} (${idRaw})`
-            : `Robot erreur notification: ${ROBOT_DRIVE_LABELS[cmd] || cmdRaw} (${idRaw})`
-        );
         return;
       }
       Vibration.vibrate(STRONG_VIBRATION_PATTERN as number[]);
@@ -120,7 +103,6 @@ export function useAlertNotifications({
     };
   }, [
     pairCodeRef,
-    pendingRobotCmdRef,
     pseudoRef,
     pushRobotLog,
     robotLastSeenAtRef,
@@ -130,7 +112,6 @@ export function useAlertNotifications({
     setCameraOn,
     setHautParleur,
     setListening,
-    setRobotCommandStatus,
     setRobotHeartbeat,
     socketRef,
     urlPhotoAlerte,

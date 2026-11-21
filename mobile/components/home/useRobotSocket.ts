@@ -6,8 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLastSeen, ensureExpoPushToken, raisonJetonAbsent, setLastSeenNow } from './notifications';
 import { Platform, Vibration, Alert, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { ROBOT_ACK_BUZZ_PREFIX, ROBOT_DRIVE_LABELS, ROBOT_DRIVE_BUZZ_PREFIX, ROBOT_CAM_BUZZ_PREFIX, ROBOT_ONLINE_BUZZ_PREFIX } from './presets';
-import type { RobotDriveCommand, RobotStatus, Coord } from './types';
+import { ROBOT_ACK_BUZZ_PREFIX, ROBOT_DRIVE_BUZZ_PREFIX, ROBOT_CAM_BUZZ_PREFIX, ROBOT_ONLINE_BUZZ_PREFIX } from './presets';
+import type { PendingRobotCommand, RobotStatus, Coord } from './types';
 import { bytesToBase64 } from './talkieConfig';
 import { rangerVideoDansGalerie } from './gallery';
 import { loadNativeMaps } from '@/components/nativeMaps';
@@ -26,7 +26,7 @@ type RobotSocketOptions = {
   setMeetStatus: React.Dispatch<React.SetStateAction<"pending" | "accepted" | null>>;
   setPeerCoord: React.Dispatch<React.SetStateAction<Coord | null>>;
   canNotifyRef: React.RefObject<boolean>;
-  pendingRobotCmdRef: React.RefObject<{ id: string; cmd: RobotDriveCommand; } | null>;
+  pendingRobotCmdRef: React.RefObject<PendingRobotCommand | null>;
   setRobotCommandStatus: React.Dispatch<React.SetStateAction<string>>;
   robotLastSeenAtRef: React.RefObject<number>;
   setRobotHeartbeat: React.Dispatch<React.SetStateAction<string>>;
@@ -42,7 +42,7 @@ type RobotSocketOptions = {
   setRobotStatus: React.Dispatch<React.SetStateAction<RobotStatus | null>>;
   capRefAttenduRef: React.RefObject<boolean>;
   setCapRef: React.Dispatch<React.SetStateAction<number | null>>;
-  robotHoldTimerRef: React.RefObject<number | null>;
+  robotHoldTimerRef: React.RefObject<ReturnType<typeof setInterval> | null>;
   lastFrameAtRef: React.RefObject<number>;
   setFrameUri: React.Dispatch<React.SetStateAction<string | null>>;
   setNavActive: React.Dispatch<React.SetStateAction<boolean>>;
@@ -228,6 +228,15 @@ export function useRobotSocket({
     s.on('disconnect', () => {
       setSocketOnline(false);
       pushRobotLog('socket disconnect');
+      const wasDriving = robotHoldTimerRef.current !== null || pendingRobotCmdRef.current !== null;
+      if (robotHoldTimerRef.current !== null) {
+        clearInterval(robotHoldTimerRef.current);
+        robotHoldTimerRef.current = null;
+      }
+      pendingRobotCmdRef.current = null;
+      if (wasDriving) {
+        setRobotCommandStatus('Pilotage interrompu : connexion au serveur perdue');
+      }
       setPairedWith('');
       setMeetRequestFrom(null);
       setMeetStatus(null);
@@ -301,16 +310,6 @@ export function useRobotSocket({
       const message = payload?.message || '';
       if (message.startsWith(ROBOT_ACK_BUZZ_PREFIX)) {
         pushRobotLog(`buzz ack raw=${message}`);
-        const parts = message.split(':');
-        const idRaw = parts.length >= 4 ? parts[1] : 'legacy';
-        const cmdRaw = parts.length >= 4 ? parts[2] : parts[1] || '';
-        const statusRaw = parts.length >= 4 ? parts[3] : parts[2] || '';
-        const cmd = cmdRaw as RobotDriveCommand;
-        const label = ROBOT_DRIVE_LABELS[cmd] || cmdRaw;
-        pendingRobotCmdRef.current = null;
-        setRobotCommandStatus(
-          statusRaw === 'OK' ? `Robot OK: ${label} (${idRaw})` : `Robot erreur: ${label} (${idRaw})`
-        );
         await setLastSeenNow();
         return;
       }
@@ -328,7 +327,6 @@ export function useRobotSocket({
         pushRobotLog(`robot online raw=${message}`);
         robotLastSeenAtRef.current = Date.now();
         setRobotHeartbeat(new Date().toLocaleTimeString());
-        setRobotCommandStatus('Robot en ligne');
         await setLastSeenNow();
         return;
       }
@@ -380,28 +378,22 @@ export function useRobotSocket({
       }
     );
 
-    s.on('robot_drive_confirmation', (payload: { ok?: boolean; cmd?: RobotDriveCommand; id?: string }) => {
+    s.on('robot_drive_confirmation', (payload: { ok?: boolean; id?: string }) => {
+      const pending = pendingRobotCmdRef.current;
+      if (!pending || pending.id !== payload?.id || !payload.ok) return;
       pushRobotLog(`robot_drive_confirmation ${JSON.stringify(payload)}`);
-      if (payload?.id && pendingRobotCmdRef.current?.id !== payload.id) return;
-      if (payload?.ok && payload?.cmd) {
-        setRobotCommandStatus(`${ROBOT_DRIVE_LABELS[payload.cmd]} envoye au serveur (${payload.id || '?'})`);
-      }
+      setRobotCommandStatus(`${pending.label} : ordre relayé, attente du retour robot`);
     });
 
-    s.on(
-      'robot_drive_status',
-      (payload: { ok?: boolean; cmd?: RobotDriveCommand; message?: string; by?: string; id?: string }) => {
-        pushRobotLog(`robot_drive_status ${JSON.stringify(payload)}`);
-        if (!payload?.cmd) return;
-        const label = ROBOT_DRIVE_LABELS[payload.cmd];
-        pendingRobotCmdRef.current = null;
-        setRobotCommandStatus(
-          payload.ok
-            ? `Robot OK: ${label} (${payload.id || '?'})`
-            : `Robot erreur: ${payload.message || label} (${payload.id || '?'})`
-        );
-      }
-    );
+    s.on('robot_drive_status', (payload: { ok?: boolean; message?: string; id?: string }) => {
+      const pending = pendingRobotCmdRef.current;
+      if (!pending || pending.id !== payload?.id) return;
+      pushRobotLog(`robot_drive_status ${JSON.stringify(payload)}`);
+      pendingRobotCmdRef.current = null;
+      setRobotCommandStatus(
+        payload.ok ? `Robot OK : ${pending.label}` : `Erreur robot : ${payload.message || pending.label}`
+      );
+    });
 
     s.on('rt_veille', (p: { eveille?: boolean; phrase?: string }) => {
       setRtEveille(!!p?.eveille);

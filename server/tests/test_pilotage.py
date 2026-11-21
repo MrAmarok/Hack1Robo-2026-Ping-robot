@@ -131,6 +131,23 @@ async def test_robot_drive_reste_dans_son_salon_et_va_au_seul_robot(serveur):
     await fermer(pilote, robot, spect, autre)
 
 
+async def test_robot_drive_hold_can_skip_server_feedback(serveur):
+    code = nouveau_code()
+    pilote, robot = await salon(serveur, code)
+    try:
+        for cmd_id, feedback in (("hold", False), ("stop", True)):
+            await pilote.sio.emit(
+                "robot_drive", {"code": code, "cmd": "S", "id": cmd_id, "feedback": feedback}
+            )
+            relayed = await robot.attendre("robot_drive", filtre=lambda d: d["id"] == cmd_id)
+            assert relayed["cmd"] == "S"
+        await pilote.attendre("robot_drive_confirmation", filtre=lambda d: d["id"] == "stop")
+        confirmations = [d["id"] for e, d in pilote.recus if e == "robot_drive_confirmation"]
+        assert confirmations == ["stop"]
+    finally:
+        await fermer(pilote, robot)
+
+
 async def test_buzz_de_commande_reserve_au_pilote(serveur):
     code = nouveau_code()
     pilote, robot = await salon(serveur, code)

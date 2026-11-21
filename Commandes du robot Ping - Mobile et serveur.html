@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commandes du robot Ping · Mobile et serveur</title>
+<style>
+
+:root {
+  --bg: #F2F6F6;
+  --surface: #FFFFFF;
+  --fg: #0E1D24;
+  --muted: #56717E;
+  --line: #C5D5DA;
+  --pipe: #E2ECEE;
+  --accent: #00835C;
+  --accent-soft: #D6F1E7;
+  --warn: #BF4A12;
+  --warn-soft: #FBE8DD;
+  --code: #EAF1F2;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #070E13; --surface: #0D1A21; --fg: #E8FFF8; --muted: #8FB3C2; --line: #1F3C49;
+    --pipe: #10232B; --accent: #00E5A0; --accent-soft: #0A3127; --warn: #FF9B5E; --warn-soft: #3A1F12;
+    --code: #0A161C; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #070E13; --surface: #0D1A21; --fg: #E8FFF8; --muted: #8FB3C2; --line: #1F3C49;
+  --pipe: #10232B; --accent: #00E5A0; --accent-soft: #0A3127; --warn: #FF9B5E; --warn-soft: #3A1F12;
+  --code: #0A161C; color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap {
+  max-width: 1000px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 500; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(30px, 5vw, 42px); line-height: 1.1; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 23px; line-height: 1.25; margin: 40px 0 0; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 16px; margin: 8px 0 0; }
+p { margin: 0; max-width: 68ch; }
+.lede { font-size: 17px; color: var(--fg); }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--code); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.stat .k { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.stat .v { font-family: var(--font-display); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat .avant { color: var(--warn); }
+.stat .fl { color: var(--muted); font-weight: 500; margin: 0 6px; }
+.stat .apres { color: var(--accent); }
+.footnote { font-size: 13px; color: var(--muted); }
+
+figure { margin: 6px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.fig-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+figcaption { font-size: 13.5px; color: var(--muted); max-width: 78ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--fg); }
+.sw.w { border-top-color: var(--warn); }
+.sw.o { border-top-color: var(--accent); }
+.sw.dash { border-top-style: dashed; border-top-color: var(--muted); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+.d { display: block; width: 100%; height: auto; min-width: 720px; }
+.d text { font-family: var(--font-body); font-size: 12px; fill: var(--fg); }
+.d .t-title { font-family: var(--font-display); font-weight: 600; font-size: 14px; }
+.d .t-sub { font-family: var(--font-body); font-weight: 400; font-size: 12px; fill: var(--muted); }
+.d .t-mono { font-family: var(--font-mono); }
+.d .t-small { font-size: 11px; }
+.d .t-muted { fill: var(--muted); }
+.d .t-warn { fill: var(--warn); }
+.d .t-ok { fill: var(--accent); }
+.d .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.d .pill { fill: var(--bg); stroke: var(--line); stroke-width: 1; }
+.d .pipe { fill: var(--pipe); stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+.d .note { fill: var(--bg); stroke: var(--muted); stroke-width: 1; }
+.d .note-o { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
+.d .life { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 3 4; fill: none; }
+.d .bracket { stroke: var(--line); stroke-width: 2; }
+.d .axis { stroke: var(--muted); stroke-width: 1; }
+.d .l { stroke: var(--fg); stroke-width: 1.4; fill: none; }
+.d .l-w { stroke: var(--warn); stroke-width: 1.4; fill: none; }
+.d .l-o { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+.d .dash { stroke-dasharray: 5 4; }
+.d .ah { fill: var(--fg); }
+.d .ah-w { fill: var(--warn); }
+.d .ah-o { fill: var(--accent); }
+.d .bar { fill: var(--muted); opacity: .45; }
+.d .tick { fill: var(--fg); }
+.d .tick-w { fill: var(--warn); }
+.d .tick-o { fill: var(--accent); }
+
+.points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; max-width: 76ch; }
+.points li::marker { color: var(--muted); }
+.keep { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 16px; max-width: 76ch; }
+
+.code-grid { display: flex; flex-direction: column; gap: 14px; }
+.code-block { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.code-head { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+pre { margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; }
+pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+.c { color: var(--muted); }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.old { color: var(--warn); }
+td.new { color: var(--fg); }
+
+.steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; max-width: 76ch; }
+.steps li::marker { font-family: var(--font-display); font-weight: 600; color: var(--accent); }
+
+@media (max-width: 640px) {
+  .stats { grid-template-columns: minmax(0, 1fr); }
+  .lede { font-size: 16px; }
+}
+body { margin: 0; }
+.d { min-width: 480px; }
+table { min-width: 560px; }
+code { overflow-wrap: anywhere; }
+.timing td { font-variant-numeric: tabular-nums; }
+a { color: var(--accent); }
+
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="eyebrow">Ping · mobile ↔ serveur</div>
+  <h1>Chemin d’une commande</h1>
+  <p class="lede">Ce qui circule entre l’application et le serveur quand on maintient « Avancer » deux secondes puis qu’on relâche.</p>
+
+  <div class="stats">
+    <div class="stat"><span class="k">Envois par ordre moteur</span><span class="v"><span class="avant">3</span><span class="fl">→</span><span class="apres">1</span></span></div>
+    <div class="stat"><span class="k">Envois pour deux secondes d’appui</span><span class="v"><span class="avant">21</span><span class="fl">→</span><span class="apres">7</span></span></div>
+    <div class="stat"><span class="k">Requêtes HTTPS de pilotage</span><span class="v apres">0</span></div>
+  </div>
+  <p class="footnote">Comptage des tentatives d’envoi par le mobile, avec les temporisateurs à l’heure, la navigation inactive et la connexion ouverte.</p>
+
+  <h2>Les échanges pour un ordre</h2>
+  <p>Le mobile ouvre Socket.IO sur <code>/ping/socket.io/</code> en WebSocket et rejoint son salon avec <code>pair</code>. Chaque ordre moteur utilise <code>robot_drive</code>. Le serveur vérifie le pilote et le salon, puis cible le robot du salon.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Sens</th><th scope="col">Événement</th><th scope="col">Rôle</th></tr></thead>
+      <tbody>
+        <tr><td>Mobile → serveur</td><td><code>robot_drive {code, cmd, id}</code></td><td>Appui, arrêt immédiat ou réglage de vitesse.</td></tr>
+        <tr><td>Serveur → mobile</td><td><code>robot_drive_confirmation</code></td><td>Le serveur a relayé l’ordre. Si aucun robot n’est connecté, il renvoie un <code>robot_drive_status</code> négatif.</td></tr>
+        <tr><td>Serveur → mobile</td><td><code>robot_drive_status</code></td><td>Résultat de la commande. L’application met à jour l’état affiché si l’identifiant correspond à l’ordre en attente.</td></tr>
+        <tr><td>Mobile → serveur</td><td><code>robot_drive {code, cmd, id, feedback: false}</code></td><td>Répétition de maintien ou d’arrêt. Le serveur omet sa propre confirmation. L’application utilise un envoi volatil pour éviter de rejouer un ordre ancien à la reconnexion.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Le mobile signale l’absence de retour après 2,5 secondes. Une déconnexion arrête les répétitions de maintien.</p>
+
+  <h2>Le maintien du bouton</h2>
+  <div class="table-scroll">
+    <table class="timing">
+      <thead><tr><th scope="col">Geste</th><th scope="col">Temps depuis l’appui</th><th scope="col">Ordre</th><th scope="col">Suivi du résultat</th></tr></thead>
+      <tbody>
+        <tr><td>Appui et maintien</td><td>0, 650, 1 300 et 1 950 ms</td><td><code>F</code> × 4</td><td>Premier envoi</td></tr>
+        <tr><td>Relâchement</td><td>2 000, 2 120 et 2 300 ms</td><td><code>S</code> × 3</td><td>Premier envoi</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Un nouvel appui annule les répétitions d’un arrêt précédent. Si la navigation automatique est active, l’appui manuel envoie aussi <code>robot_nav {code, on: false}</code>.</p>
+
+  <h2>L’événement <code>drive</code> côté serveur</h2>
+  <p class="keep">Le serveur gère déjà <code>drive</code>. L’application utilise <code>robot_drive</code>, que le client robot du dépôt prend en charge.</p>
+  <ul class="points">
+    <li><code>drive {cmd, ack: true}</code> demande un accusé Socket.IO. Le serveur détermine le salon d’après la session du pilote et attend la réponse à l’ordre pendant 1,5 s au maximum. L’accusé peut contenir <code>ok</code>, <code>cmd</code>, <code>arduino</code> et <code>erreur</code>.</li>
+    <li><code>drive {cmd}</code> demande un relais sans attente de résultat. Les commandes inconnues, les sessions sans droit de pilotage et les salons sans robot donnent lieu à un retour d’erreur si l’émetteur demande un accusé Socket.IO.</li>
+  </ul>
+
+  <h2>Vitesse, caméra et arrêt d’urgence</h2>
+  <ul class="points">
+    <li><strong>Vitesse.</strong> Le réglage envoie <code>V140</code> à <code>V255</code> via <code>robot_drive</code>.</li>
+    <li><strong>Caméra.</strong> Les flèches envoient des angles absolus via <code>robot_cam_move</code> et un <code>buzz</code> préfixé par <code>PING_ROBOT_CAM:</code>. Le maintien répète l’envoi toutes les 140 ms. Le serveur contrôle le pilote et le salon sur les deux événements.</li>
+    <li><strong>Arrêt d’urgence.</strong> Le mobile envoie <code>robot_stop_all</code>, puis les événements <code>robot_nav</code>, <code>robot_ronde</code>, <code>robot_rt</code> et <code>robot_alarme</code> pour arrêter ces fonctions. Il annule le maintien et envoie les ordres moteur <code>S</code> habituels.</li>
+  </ul>
+
+  <h2>Sources dans le dépôt</h2>
+  <p class="footnote">Mobile <a href="mobile/components/home/useDriveControls.ts">useDriveControls.ts</a>, <a href="mobile/components/home/useRobotSocket.ts">useRobotSocket.ts</a>, <a href="mobile/components/home/HomeScreen.tsx">HomeScreen.tsx</a>. Serveur <a href="server/app/websocket/robot.py">robot.py</a>, <a href="server/app/websocket/salon.py">salon.py</a>, <a href="server/app/api/routes.py">routes.py</a>.</p>
+</main>
+</body>
+</html>

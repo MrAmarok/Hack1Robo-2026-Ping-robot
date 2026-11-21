@@ -408,15 +408,17 @@ EVENEMENTS: list[Evenement] = [
         ack_description="Seulement avec `ack: true`. Réponse du robot, ou erreur du serveur.",
     ),
     Evenement(
-        "robot_drive", T_PILOTAGE, "Commande moteur (ancien canal)",
-        "Gardé pour les versions de l'app qui ne connaissent pas `drive`. Commandes : `F` avancer, `B` reculer, "
+        "robot_drive", T_PILOTAGE, "Commande moteur",
+        "Commandes : `F` avancer, `B` reculer, "
         "`L`/`R` tourner, `S` stop, `+`/`-` vitesse, `V<n>` vitesse absolue (`V180`), `M<gauche>,<droite>` pilotage "
         "différentiel (`M100,-40`). Mise en majuscules ; une commande invalide est ignorée. Transmis au seul robot du "
         "salon de la session. L'émetteur reçoit `robot_drive_confirmation`, ou `robot_drive_status` avec `ok: false` "
-        "si aucun robot n'est connecté. L'assistant vocal et l'arrêt d'urgence émettent aussi cet événement "
+        "si aucun robot n'est connecté. Avec `feedback: false`, le serveur relaie l'ordre sans envoyer sa propre "
+        "confirmation ou erreur. L'assistant vocal et l'arrêt d'urgence émettent aussi cet événement "
         "(`by` = `solana` ou `arret-urgence`).",
         emis=modele("RobotDriveEmis", {"code": "1234", "cmd": "M100,-40", "id": "c-1795250000000"}, code=CODE,
-                    cmd=(str, "Commande."), id=(Optional[str], "Identifiant de la commande.", OPT)),
+                    cmd=(str, "Commande."), id=(Optional[str], "Identifiant de la commande.", OPT),
+                    feedback=(Optional[bool], "Retour direct du serveur, activé par défaut.", OPT)),
         emis_par=A_PILOTE,
         recu=modele("RobotDriveRecu", {"id": "c-1795250000000", "cmd": "M100,-40", "by": "Andy"},
                     id=(str, "Identifiant."), cmd=(str, "Commande normalisée."), by=(str, "Qui a commandé.")),

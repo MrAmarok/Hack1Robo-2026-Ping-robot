@@ -683,6 +683,18 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
   },
+  fsDriveStatus: {
+    pointerEvents: 'none',
+    position: 'absolute',
+    bottom: 4,
+    alignSelf: 'center',
+    maxWidth: '94%',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(6,12,16,0.88)',
+  },
+  fsDriveStatusText: { color: '#E8FFF8', fontSize: 11 },
   // Temoin de connexion du robot
   linkBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   linkDot: { width: 10, height: 10, borderRadius: 5 },

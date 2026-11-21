@@ -1,6 +1,8 @@
 export type NotifStatus = 'granted' | 'denied' | 'undetermined';
 export type Coord = { latitude: number; longitude: number };
 export type Mode = 'driving' | 'walking' | 'transit' | 'bicycling';
+export type PendingRobotCommand = { id: string; label: string };
+
 export type RobotDriveCommand = 'F' | 'B' | 'L' | 'R' | 'S' | '+' | '-';
 export type RobotStatus = {
   fix?: boolean;

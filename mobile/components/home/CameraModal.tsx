@@ -66,6 +66,7 @@ type CameraModalProps = {
   rtPhrase: string;
   estPilote: boolean;
   role: "pilote" | "spectateur" | "attente" | null;
+  robotCommandStatus: string;
   startRobotDriveHold: (cmd: RobotDriveCommand) => void;
   stopRobotDriveHold: () => void;
   videosChargement: boolean;
@@ -134,6 +135,7 @@ export function CameraModal({
   rtPhrase,
   estPilote,
   role,
+  robotCommandStatus,
   startRobotDriveHold,
   stopRobotDriveHold,
   videosChargement,
@@ -469,6 +471,14 @@ export function CameraModal({
                   <Text style={styles.camPadSymbol}>▼</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          )}
+
+          {estPilote && !!robotCommandStatus && (
+            <View style={styles.fsDriveStatus}>
+              <Text accessibilityLiveRegion="polite" numberOfLines={1} style={styles.fsDriveStatusText}>
+                {robotCommandStatus}
+              </Text>
             </View>
           )}
 
