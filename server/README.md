@@ -100,6 +100,8 @@ passer pour un robot. La remplir **après** avoir mis à jour le robot.
 
 ## Capteur : données pour la carte (robot → serveur)
 
+Tuto pas à pas côté robot : [robot/CAPTEUR.md](../robot/CAPTEUR.md).
+
 Le robot envoie les lignes du capteur, déjà au format de `sonar-mapping/map_sonar.py`, par un **WebSocket dédié** ;
 le serveur les range dans un CSV par session : `capteur/<code>/<session>.csv` (`CAPTEUR_DIR`).
 

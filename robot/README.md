@@ -82,6 +82,8 @@ Options (variables d'environnement) :
 | `CAPTEUR_SESSION` | — | Session (fichier côté serveur). Vide = une nouvelle à chaque démarrage |
 | `ROBOT_KEY` | — | Même valeur que `ROBOT_KEY` du serveur, si elle y est configurée |
 
+Envoyer les données du capteur au serveur (format, mise en route, débogage) : voir [CAPTEUR.md](CAPTEUR.md).
+
 Exemple complet :
 
 ```bash
