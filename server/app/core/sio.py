@@ -97,7 +97,9 @@ async def disconnect(sid, *args):
             log("[SOCKET] erreur a la deconnexion :", repr(e))
 
 
-async def emit_room(room: str, event: str, data: Any = None, skip_sid: str | None = None) -> None:
+async def emit_room(
+    room: str, event: str, data: Any = None, skip_sid: str | None = None
+) -> None:
     if not room:
         return
     await sio.emit(event, data, room=str(room), skip_sid=skip_sid)

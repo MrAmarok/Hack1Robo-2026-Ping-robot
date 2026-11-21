@@ -24,14 +24,19 @@ _UUID = re.compile(r"^[a-z\d]{8}-[a-z\d]{4}-[a-z\d]{4}-[a-z\d]{4}-[a-z\d]{12}$",
 def is_expo_push_token(token: Any) -> bool:
     if not isinstance(token, str):
         return False
-    if (token.startswith("ExponentPushToken[") or token.startswith("ExpoPushToken[")) and token.endswith("]"):
+    if (
+        token.startswith("ExponentPushToken[") or token.startswith("ExpoPushToken[")
+    ) and token.endswith("]"):
         return True
     return bool(_UUID.match(token))
 
 
 def sauver_tokens() -> None:
     try:
-        plat = {code: {p: sorted(s) for p, s in par.items()} for code, par in persistent_push_tokens.items()}
+        plat = {
+            code: {p: sorted(s) for p, s in par.items()}
+            for code, par in persistent_push_tokens.items()
+        }
         with open(PUSH_FICHIER, "w", encoding="utf8") as f:
             json.dump(plat, f)
     except OSError as e:
@@ -98,18 +103,23 @@ async def send_push_notifications(messages: list[dict]) -> list[dict]:
     tickets: list[dict] = []
     async with httpx.AsyncClient(timeout=15) as client:
         for i in range(0, len(messages), _TAILLE_LOT):
-            lot = messages[i:i + _TAILLE_LOT]
+            lot = messages[i : i + _TAILLE_LOT]
             try:
                 r = await client.post(
                     EXPO_SEND_URL,
                     json=lot,
-                    headers={"Accept": "application/json", "Accept-Encoding": "gzip, deflate"},
+                    headers={
+                        "Accept": "application/json",
+                        "Accept-Encoding": "gzip, deflate",
+                    },
                 )
                 data = r.json().get("data")
                 if isinstance(data, list):
                     tickets.extend(data)
                 else:
-                    msg = (r.json().get("errors") or [{}])[0].get("message", f"HTTP {r.status_code}")
+                    msg = (r.json().get("errors") or [{}])[0].get(
+                        "message", f"HTTP {r.status_code}"
+                    )
                     tickets.extend({"status": "error", "message": msg} for _ in lot)
             except Exception as e:
                 tickets.extend({"status": "error", "message": str(e)} for _ in lot)
@@ -120,13 +130,19 @@ async def get_push_receipts(ids: list[str]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     async with httpx.AsyncClient(timeout=15) as client:
         for i in range(0, len(ids), 300):
-            r = await client.post(EXPO_RECEIPTS_URL, json={"ids": ids[i:i + 300]})
+            r = await client.post(EXPO_RECEIPTS_URL, json={"ids": ids[i : i + 300]})
             out.update(r.json().get("data") or {})
     return out
 
 
-def message_push(token: str, title: str, body: str, data: dict | None = None,
-                 sound: str = "default", image: str | None = None) -> dict:
+def message_push(
+    token: str,
+    title: str,
+    body: str,
+    data: dict | None = None,
+    sound: str = "default",
+    image: str | None = None,
+) -> dict:
     m = {
         "to": token,
         "sound": sound,
@@ -142,7 +158,9 @@ def message_push(token: str, title: str, body: str, data: dict | None = None,
     return m
 
 
-def _jetons_connectes(code: str, exclude_sid: str | None, pseudos: set[str] | None = None) -> list[str]:
+def _jetons_connectes(
+    code: str, exclude_sid: str | None, pseudos: set[str] | None = None
+) -> list[str]:
     out = []
     for sid, info in users.items():
         if info.get("code") != code or sid == exclude_sid:
@@ -155,20 +173,35 @@ def _jetons_connectes(code: str, exclude_sid: str | None, pseudos: set[str] | No
     return out
 
 
-async def send_silent_sync_push_to_room(code: str, exclude_sid: str | None = None) -> None:
+async def send_silent_sync_push_to_room(
+    code: str, exclude_sid: str | None = None
+) -> None:
     vus: set[str] = set()
     notifs = []
     for t in _jetons_connectes(code, exclude_sid) + get_tokens_for_room(code):
         if is_expo_push_token(t) and t not in vus:
-            notifs.append({"to": t, "contentAvailable": True, "priority": "high", "data": {"type": "sync"}})
+            notifs.append(
+                {
+                    "to": t,
+                    "contentAvailable": True,
+                    "priority": "high",
+                    "data": {"type": "sync"},
+                }
+            )
             vus.add(t)
     if notifs:
         await send_push_notifications(notifs)
 
 
-async def send_visible_push_to_room(room_code: str, title: str, body: str, exclude_sid: str | None = None,
-                                    data: dict | None = None, sound: str = "default",
-                                    image: str | None = None) -> None:
+async def send_visible_push_to_room(
+    room_code: str,
+    title: str,
+    body: str,
+    exclude_sid: str | None = None,
+    data: dict | None = None,
+    sound: str = "default",
+    image: str | None = None,
+) -> None:
     vus: set[str] = set()
     notifs = []
     for t in _jetons_connectes(room_code, exclude_sid) + get_tokens_for_room(room_code):
@@ -176,14 +209,18 @@ async def send_visible_push_to_room(room_code: str, title: str, body: str, exclu
             notifs.append(message_push(t, title, body, data, sound, image))
             vus.add(t)
     if not notifs:
-        log(f"[PUSH] AUCUN destinataire pour le salon {room_code} — \"{title}\" non envoyee.")
+        log(
+            f'[PUSH] AUCUN destinataire pour le salon {room_code} — "{title}" non envoyee.'
+        )
         return
     tickets = await send_push_notifications(notifs)
     for t in tickets:
         if t.get("status") == "error":
-            log(f"[PUSH] refus d'Expo : {t.get('message')} {json.dumps(t.get('details') or {})}")
+            log(
+                f"[PUSH] refus d'Expo : {t.get('message')} {json.dumps(t.get('details') or {})}"
+            )
     vises = ", ".join(str(n["to"])[-9:] for n in notifs)
-    log(f"[PUSH] \"{title}\" envoye a {len(notifs)} destinataire(s) : {vises}")
+    log(f'[PUSH] "{title}" envoye a {len(notifs)} destinataire(s) : {vises}')
 
     jeton_du_ticket = {
         t["id"]: notifs[i]["to"]
@@ -205,28 +242,42 @@ async def _verifier_recus(jeton_du_ticket: dict[str, str]) -> None:
         jeton = jeton_du_ticket.get(rid)
         fin = str(jeton or "?")[-9:]
         if r.get("status") == "error":
-            log(f"[PUSH] LIVRAISON ECHOUEE {fin} : {r.get('message')} {json.dumps(r.get('details') or {})}")
+            log(
+                f"[PUSH] LIVRAISON ECHOUEE {fin} : {r.get('message')} {json.dumps(r.get('details') or {})}"
+            )
             if (r.get("details") or {}).get("error") == "DeviceNotRegistered" and jeton:
                 retirer_jeton_mort(jeton)
         else:
             log(f"[PUSH] livraison confirmee {fin}")
 
 
-async def send_visible_push_to_pseudos(room_code: str, pseudos: Iterable[str], title: str, body: str,
-                                       data: dict | None = None, sound: str = "default",
-                                       image: str | None = None) -> None:
+async def send_visible_push_to_pseudos(
+    room_code: str,
+    pseudos: Iterable[str],
+    title: str,
+    body: str,
+    data: dict | None = None,
+    sound: str = "default",
+    image: str | None = None,
+) -> None:
     cible = set(pseudos)
     vus: set[str] = set()
     notifs = []
-    for t in _jetons_connectes(room_code, None, cible) + get_tokens_for_pseudos(room_code, cible):
+    for t in _jetons_connectes(room_code, None, cible) + get_tokens_for_pseudos(
+        room_code, cible
+    ):
         if is_expo_push_token(t) and t not in vus:
             notifs.append(message_push(t, title, body, data, sound, image))
             vus.add(t)
     if not notifs:
-        log(f"[PUSH] AUCUN destinataire pour le salon {room_code} — notification non envoyee.")
+        log(
+            f"[PUSH] AUCUN destinataire pour le salon {room_code} — notification non envoyee."
+        )
         return
     tickets = await send_push_notifications(notifs)
     for t in tickets:
         if t.get("status") == "error":
-            log(f"[PUSH] refus d'Expo : {t.get('message')} {json.dumps(t.get('details') or {})}")
-    log(f"[PUSH] \"{title}\" envoye a {len(notifs)} destinataire(s).")
+            log(
+                f"[PUSH] refus d'Expo : {t.get('message')} {json.dumps(t.get('details') or {})}"
+            )
+    log(f'[PUSH] "{title}" envoye a {len(notifs)} destinataire(s).')

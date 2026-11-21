@@ -21,9 +21,16 @@ def _read_snapshot(path: Path) -> dict | None:
     if not isinstance(snapshot, dict):
         return None
     image = snapshot.get("image")
-    if not isinstance(image, dict) or image.get("format") not in ("png", "svg") or not isinstance(image.get("data"), str):
+    if (
+        not isinstance(image, dict)
+        or image.get("format") not in ("png", "svg")
+        or not isinstance(image.get("data"), str)
+    ):
         return None
-    if not all(type(snapshot.get(key)) is int for key in ("readingCount", "totalReadings", "updatedAt")):
+    if not all(
+        type(snapshot.get(key)) is int
+        for key in ("readingCount", "totalReadings", "updatedAt")
+    ):
         return None
     if type(snapshot.get("resolutionM")) not in (int, float):
         return None

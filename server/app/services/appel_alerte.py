@@ -36,7 +36,10 @@ _charger()
 def _sauver() -> None:
     try:
         Path(FICHIER_REGLAGES).write_text(
-            json.dumps({"coupes": list(_coupes)}, ensure_ascii=False, separators=(",", ":")), "utf8"
+            json.dumps(
+                {"coupes": list(_coupes)}, ensure_ascii=False, separators=(",", ":")
+            ),
+            "utf8",
         )
     except Exception as e:
         log("[APPEL] reglage non enregistre :", str(e))
@@ -100,7 +103,9 @@ async def appeler_alerte(code: Any, heure: Any, phrase: Any = None) -> bool:
     t = now_ms()
     avant = _dernier_appel
     if avant and t - avant < cadence:
-        log(f"[APPEL] {c} : deja appele il y a {math.floor((t - avant) / 1000 + 0.5)} s, pas de nouvel appel.")
+        log(
+            f"[APPEL] {c} : deja appele il y a {math.floor((t - avant) / 1000 + 0.5)} s, pas de nouvel appel."
+        )
         return False
     _dernier_appel = t
 
@@ -145,7 +150,9 @@ async def lancer_appel_twilio(to: Any, twiml: str) -> dict:
         if not isinstance(j, dict):
             j = {}
         if not r.is_success:
-            log(f"[APPEL] refus Twilio (HTTP {r.status_code}) : {j.get('message') or 'sans detail'}")
+            log(
+                f"[APPEL] refus Twilio (HTTP {r.status_code}) : {j.get('message') or 'sans detail'}"
+            )
             return {"ok": False}
         return {"ok": True, "sid": j.get("sid")}
     except Exception as e:

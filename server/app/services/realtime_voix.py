@@ -18,7 +18,15 @@ from websockets.protocol import State
 
 from app.core.config import ENV_FILE, env, env_float
 from app.core.logs import log, now_ms
-from app.core.sio import emit_room, emit_to, on, on_disconnect, payload, room_sids, tache
+from app.core.sio import (
+    emit_room,
+    emit_to,
+    on,
+    on_disconnect,
+    payload,
+    room_sids,
+    tache,
+)
 
 TAUX = 24000
 
@@ -68,7 +76,9 @@ def _compiler(motif: str) -> re.Pattern:
 
 
 def _mot_reveil() -> re.Pattern:
-    return _compiler(env("REALTIME_MOT_REVEIL", _MOT_REVEIL_DEFAUT) or _MOT_REVEIL_DEFAUT)
+    return _compiler(
+        env("REALTIME_MOT_REVEIL", _MOT_REVEIL_DEFAUT) or _MOT_REVEIL_DEFAUT
+    )
 
 
 def _veille_delai_ms() -> float:
@@ -108,7 +118,11 @@ def _octets(x: Any) -> bytes | None:
         return bytes(x)
     if isinstance(x, str):
         return x.encode("utf-8")
-    if isinstance(x, dict) and x.get("type") == "Buffer" and isinstance(x.get("data"), list):
+    if (
+        isinstance(x, dict)
+        and x.get("type") == "Buffer"
+        and isinstance(x.get("data"), list)
+    ):
         x = x["data"]
     if isinstance(x, (list, tuple)):
         try:
@@ -171,7 +185,11 @@ class _Liaison:
 
     @property
     def ouverte(self) -> bool:
-        return self.conn is not None and not self.fermee and getattr(self.conn, "state", None) is State.OPEN
+        return (
+            self.conn is not None
+            and not self.fermee
+            and getattr(self.conn, "state", None) is State.OPEN
+        )
 
     def demarrer(self, conn: Any) -> None:
         self.conn = conn
@@ -262,7 +280,9 @@ class SessionVocale:
         self.eveille = not self.veille
         self.veille_timer: asyncio.Task | None = None
         if self.veille:
-            self.log(f'[{self.etiquette}] code={self.code} en veille, dites "{_mot_reveil_lisible()}" pour parler.')
+            self.log(
+                f'[{self.etiquette}] code={self.code} en veille, dites "{_mot_reveil_lisible()}" pour parler.'
+            )
 
     async def _audio(self, pcm: bytes) -> None:
         await _attendre(self.on_audio(pcm))
@@ -295,7 +315,9 @@ class SessionVocale:
 
         if liaison.fermee:
             tache(_fermer_sans_attendre(conn))
-            await self._sur_erreur("WebSocket was closed before the connection was established")
+            await self._sur_erreur(
+                "WebSocket was closed before the connection was established"
+            )
             await self._sur_fermeture(1006, "")
             return
 
@@ -307,7 +329,9 @@ class SessionVocale:
                 try:
                     await self._sur_evenement(brut)
                 except Exception as e:
-                    self.log(f"[{self.etiquette}] code={self.code} erreur : {_message(e)}")
+                    self.log(
+                        f"[{self.etiquette}] code={self.code} erreur : {_message(e)}"
+                    )
         except ConnectionClosed:
             pass
         except asyncio.CancelledError:
@@ -319,36 +343,52 @@ class SessionVocale:
         if erreur is not None:
             await self._sur_erreur(_message(erreur))
         code = getattr(conn, "close_code", None)
-        await self._sur_fermeture(code if code is not None else 1006, getattr(conn, "close_reason", "") or "")
+        await self._sur_fermeture(
+            code if code is not None else 1006, getattr(conn, "close_reason", "") or ""
+        )
 
     async def _sur_ouverture(self, liaison: _Liaison) -> None:
         vb = _voice_brain()
-        self.log(f"[{self.etiquette}] code={self.code} session ouverte ({_model()}, voix {_voix()}).")
-        liaison.envoyer(_json({
-            "type": "session.update",
-            "session": {
-                "type": "realtime",
-                "instructions": (
-                    vb.SYSTEM_PROMPT
-                    + "\n\nTu es maintenant en conversation VOCALE DIRECTE. Reponds en une ou deux "
-                    + "phrases courtes, comme on parle. Si tu dois agir, agis d'abord et commente "
-                    + "en une phrase. N'enumere jamais de listes a voix haute."
-                    + ("\n\n" + self.consignes if self.consignes else "")
-                ),
-                "audio": {
-                    "input": {
-                        "format": self.format_audio,
-                        "turn_detection": (
-                            {**self.detection, "create_response": False} if self.veille else self.detection
+        self.log(
+            f"[{self.etiquette}] code={self.code} session ouverte ({_model()}, voix {_voix()})."
+        )
+        liaison.envoyer(
+            _json(
+                {
+                    "type": "session.update",
+                    "session": {
+                        "type": "realtime",
+                        "instructions": (
+                            vb.SYSTEM_PROMPT
+                            + "\n\nTu es maintenant en conversation VOCALE DIRECTE. Reponds en une ou deux "
+                            + "phrases courtes, comme on parle. Si tu dois agir, agis d'abord et commente "
+                            + "en une phrase. N'enumere jamais de listes a voix haute."
+                            + ("\n\n" + self.consignes if self.consignes else "")
                         ),
-                        "transcription": {"model": "gpt-4o-mini-transcribe", "language": "fr"},
+                        "audio": {
+                            "input": {
+                                "format": self.format_audio,
+                                "turn_detection": (
+                                    {**self.detection, "create_response": False}
+                                    if self.veille
+                                    else self.detection
+                                ),
+                                "transcription": {
+                                    "model": "gpt-4o-mini-transcribe",
+                                    "language": "fr",
+                                },
+                            },
+                            "output": {"format": self.format_audio, "voice": _voix()},
+                        },
+                        "tools": [
+                            *outils_openai(),
+                            *[o["declaration"] for o in self.outils_en_plus],
+                        ],
+                        "tool_choice": "auto",
                     },
-                    "output": {"format": self.format_audio, "voice": _voix()},
-                },
-                "tools": [*outils_openai(), *[o["declaration"] for o in self.outils_en_plus]],
-                "tool_choice": "auto",
-            },
-        }))
+                }
+            )
+        )
         self.prete = True
         self.ouverte_a = now_ms()
         self.reponses = 0
@@ -356,10 +396,16 @@ class SessionVocale:
         await self._annoncer_veille()
         self._armer_inactivite()
         if self.accueil:
-            self._envoyer({
-                "type": "conversation.item.create",
-                "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": self.accueil}]},
-            })
+            self._envoyer(
+                {
+                    "type": "conversation.item.create",
+                    "item": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": self.accueil}],
+                    },
+                }
+            )
             self._envoyer({"type": "response.create"})
 
     async def _sur_erreur(self, message: str) -> None:
@@ -377,7 +423,11 @@ class SessionVocale:
 
     async def _sur_evenement(self, brut: Any) -> None:
         try:
-            texte = brut if isinstance(brut, str) else bytes(brut).decode("utf-8", "replace")
+            texte = (
+                brut
+                if isinstance(brut, str)
+                else bytes(brut).decode("utf-8", "replace")
+            )
             ev = json.loads(texte)
         except Exception:
             return
@@ -405,7 +455,9 @@ class SessionVocale:
 
         elif t == "response.output_audio_transcript.done":
             if ev.get("transcript"):
-                self.log(f'[{self.etiquette}] code={self.code} robot: "{ev["transcript"]}"')
+                self.log(
+                    f'[{self.etiquette}] code={self.code} robot: "{ev["transcript"]}"'
+                )
 
         elif t == "conversation.item.input_audio_transcription.completed":
             await self._sur_transcription(ev.get("transcript"))
@@ -429,7 +481,9 @@ class SessionVocale:
                 if _mot_reveil().search(dit):
                     await self._reveiller("nom prononce")
                 elif not self.eveille:
-                    self.log(f"[{self.etiquette}] code={self.code} en veille, pas de reponse.")
+                    self.log(
+                        f"[{self.etiquette}] code={self.code} en veille, pas de reponse."
+                    )
                     return
                 else:
                     self._programmer_veille()
@@ -437,7 +491,9 @@ class SessionVocale:
             if self.veille and not self.reponse_en_cours:
                 self._envoyer({"type": "response.create"})
         elif self.veille and self.eveille:
-            self.log(f"[{self.etiquette}] code={self.code} tour sans transcription -> reponse demandee quand meme.")
+            self.log(
+                f"[{self.etiquette}] code={self.code} tour sans transcription -> reponse demandee quand meme."
+            )
             if not self.reponse_en_cours:
                 self._envoyer({"type": "response.create"})
 
@@ -462,7 +518,11 @@ class SessionVocale:
         self._programmer_veille()
 
     def etat_veille(self) -> dict:
-        return {"eveille": self.eveille, "veille": self.veille, "phrase": _mot_reveil_lisible()}
+        return {
+            "eveille": self.eveille,
+            "veille": self.veille,
+            "phrase": _mot_reveil_lisible(),
+        }
 
     async def _annoncer_veille(self) -> None:
         if not self.annoncer:
@@ -472,7 +532,11 @@ class SessionVocale:
     async def _traiter_outils(self, ev: dict) -> None:
         reponse = ev.get("response")
         sorties = (reponse.get("output") if isinstance(reponse, dict) else None) or []
-        appels = [o for o in sorties if isinstance(o, dict) and o.get("type") == "function_call"]
+        appels = [
+            o
+            for o in sorties
+            if isinstance(o, dict) and o.get("type") == "function_call"
+        ]
         if not appels:
             return
 
@@ -485,25 +549,41 @@ class SessionVocale:
             images: list[str] = []
             try:
                 propre = next(
-                    (o for o in self.outils_en_plus if o["declaration"].get("name") == appel.get("name")),
+                    (
+                        o
+                        for o in self.outils_en_plus
+                        if o["declaration"].get("name") == appel.get("name")
+                    ),
                     None,
                 )
                 if propre:
                     blocs = await _attendre(propre["executer"](entree))
                 else:
-                    blocs = await _voice_brain().run_tool(appel.get("name"), entree, {
-                        "code": self.code,
-                        "frame": self.image_fournie() if self.image_fournie else self.image,
-                        "log": self.log,
-                    })
+                    blocs = await _voice_brain().run_tool(
+                        appel.get("name"),
+                        entree,
+                        {
+                            "code": self.code,
+                            "frame": (
+                                self.image_fournie()
+                                if self.image_fournie
+                                else self.image
+                            ),
+                            "log": self.log,
+                        },
+                    )
                 blocs = [b for b in (blocs or []) if isinstance(b, dict)]
                 texte = " ".join(
-                    "" if b.get("text") is None else str(b.get("text")) for b in blocs if b.get("type") == "text"
+                    "" if b.get("text") is None else str(b.get("text"))
+                    for b in blocs
+                    if b.get("type") == "text"
                 )
                 images = [
                     f"data:{b['source'].get('media_type') or 'image/jpeg'};base64,{b['source']['data']}"
                     for b in blocs
-                    if b.get("type") == "image" and isinstance(b.get("source"), dict) and b["source"].get("data")
+                    if b.get("type") == "image"
+                    and isinstance(b.get("source"), dict)
+                    and b["source"].get("data")
                 ]
             except Exception as e:
                 texte = f"Erreur outil : {_message(e)}"
@@ -511,23 +591,27 @@ class SessionVocale:
                 f"[{self.etiquette}] code={self.code} outil {appel.get('name')} -> {texte[:80]}"
                 + (f" [+{len(images)} image]" if images else "")
             )
-            self._envoyer({
-                "type": "conversation.item.create",
-                "item": {
-                    "type": "function_call_output",
-                    "call_id": appel.get("call_id"),
-                    "output": _json({"resultat": texte}),
-                },
-            })
-            for url in images:
-                self._envoyer({
+            self._envoyer(
+                {
                     "type": "conversation.item.create",
                     "item": {
-                        "type": "message",
-                        "role": "user",
-                        "content": [{"type": "input_image", "image_url": url}],
+                        "type": "function_call_output",
+                        "call_id": appel.get("call_id"),
+                        "output": _json({"resultat": texte}),
                     },
-                })
+                }
+            )
+            for url in images:
+                self._envoyer(
+                    {
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "message",
+                            "role": "user",
+                            "content": [{"type": "input_image", "image_url": url}],
+                        },
+                    }
+                )
         self._envoyer({"type": "response.create"})
 
     def _envoyer(self, objet: Any) -> None:
@@ -541,10 +625,12 @@ class SessionVocale:
         if not octets:
             return
         self.dernier_echange = now_ms()
-        self._envoyer({
-            "type": "input_audio_buffer.append",
-            "audio": base64.b64encode(octets).decode("ascii"),
-        })
+        self._envoyer(
+            {
+                "type": "input_audio_buffer.append",
+                "audio": base64.b64encode(octets).decode("ascii"),
+            }
+        )
 
     def _armer_inactivite(self) -> None:
         _annuler(self._minuteur)
@@ -554,7 +640,9 @@ class SessionVocale:
         while True:
             await asyncio.sleep(_VERIF_INACTIVITE_S)
             if now_ms() - self.dernier_echange > _inactivite_ms():
-                self.log(f"[{self.etiquette}] code={self.code} inactive -> fermeture (economie).")
+                self.log(
+                    f"[{self.etiquette}] code={self.code} inactive -> fermeture (economie)."
+                )
                 await self.fermer()
                 return
 
@@ -622,7 +710,9 @@ async def _rt_start(sid: str, data: Any) -> None:
         return
     s = _obtenir(code)
     if not s.ouvrir():
-        await emit_room(code, "rt_etat", {"actif": False, "erreur": "cle OpenAI absente"})
+        await emit_room(
+            code, "rt_etat", {"actif": False, "erreur": "cle OpenAI absente"}
+        )
 
 
 @on("rt_veille_etat")

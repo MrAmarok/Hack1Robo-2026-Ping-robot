@@ -21,10 +21,30 @@ GESTIONNAIRES_SOCKET = (robot, salon, sonar, alertes)
 
 
 _OPTIONNELS = [
-    ("app.services.voice_brain", "attach_voice_brain", "[VOICE]", "assistant vocal non demarre"),
-    ("app.services.realtime_voix", "attach_realtime_voix", "[VOICE]", "conversation en direct non demarree"),
-    ("app.services.appel_direct", "attach_appel_direct", "[TEL]", "conversation telephonique non demarree"),
-    ("app.services.enregistrement", "attach_enregistrement", "[REC]", "enregistrement non demarre"),
+    (
+        "app.services.voice_brain",
+        "attach_voice_brain",
+        "[VOICE]",
+        "assistant vocal non demarre",
+    ),
+    (
+        "app.services.realtime_voix",
+        "attach_realtime_voix",
+        "[VOICE]",
+        "conversation en direct non demarree",
+    ),
+    (
+        "app.services.appel_direct",
+        "attach_appel_direct",
+        "[TEL]",
+        "conversation telephonique non demarree",
+    ),
+    (
+        "app.services.enregistrement",
+        "attach_enregistrement",
+        "[REC]",
+        "enregistrement non demarre",
+    ),
 ]
 
 _modules_charges: dict[str, object] = {}
@@ -59,7 +79,9 @@ async def lifespan(_app: FastAPI):
 
 
 fastapi_app = FastAPI(title="Ping server", version="2.0.0", lifespan=lifespan)
-fastapi_app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+fastapi_app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+)
 fastapi_app.include_router(http_router)
 
 _appel = _modules_charges.get("app.services.appel_direct")
@@ -88,7 +110,9 @@ def main() -> None:
             log(f"Port {port} deja utilise, bascule sur le port robot {DEFAULT_PORT}.")
             port = DEFAULT_PORT
         if not _port_libre(port):
-            log(f"Port {port} deja utilise. Arrete le process qui occupe ce port ou change PORT.")
+            log(
+                f"Port {port} deja utilise. Arrete le process qui occupe ce port ou change PORT."
+            )
             raise SystemExit(1)
     global _port_ecoute
     _port_ecoute = port

@@ -4,18 +4,48 @@ import asyncio
 
 from app.core.logs import log, now_ms, robot_log
 from app.core.sio import (
-    emit_room, emit_to, enter_room, is_connected, leave_room, on, on_connect,
-    on_disconnect, payload, room_sids, tache,
+    emit_room,
+    emit_to,
+    enter_room,
+    is_connected,
+    leave_room,
+    on,
+    on_connect,
+    on_disconnect,
+    payload,
+    room_sids,
+    tache,
 )
 from app.core.state import (
-    GRACE_MS, deliver_queue_to, enqueue_for, ensure_profile, est_pilote, file_attente,
-    get_events_since, groupe_spectateurs, log_room_event, mark_online, pilote_present,
-    pilotes, plan_mark_offline, profiles, push_tokens, reattribuer_pilote, robots,
-    sids_du_salon, socket_to_user_id, user_id_of, users,
+    GRACE_MS,
+    deliver_queue_to,
+    enqueue_for,
+    ensure_profile,
+    est_pilote,
+    file_attente,
+    get_events_since,
+    groupe_spectateurs,
+    log_room_event,
+    mark_online,
+    pilote_present,
+    pilotes,
+    plan_mark_offline,
+    profiles,
+    push_tokens,
+    reattribuer_pilote,
+    robots,
+    sids_du_salon,
+    socket_to_user_id,
+    user_id_of,
+    users,
 )
 from app.services.push import (
-    add_persistent_token, get_tokens_for_room, is_expo_push_token,
-    send_silent_sync_push_to_room, send_visible_push_to_pseudos, send_visible_push_to_room,
+    add_persistent_token,
+    get_tokens_for_room,
+    is_expo_push_token,
+    send_silent_sync_push_to_room,
+    send_visible_push_to_pseudos,
+    send_visible_push_to_room,
 )
 from app.websocket.sonar import send_latest
 
@@ -46,7 +76,9 @@ async def _pair(sid, data):
             users[sid] = {"pseudo": pseudo, "code": code}
             await emit_to(sid, "role_acces", {"role": "attente"})
             await emit_to(pilotes[code], "acces_demande", {"id": sid, "pseudo": pseudo})
-            log(f"[ROLE] {code} : '{pseudo}' demande a entrer, le pilote doit repondre.")
+            log(
+                f"[ROLE] {code} : '{pseudo}' demande a entrer, le pilote doit repondre."
+            )
             return
 
     users[sid] = {"pseudo": pseudo, "code": code}
@@ -120,7 +152,9 @@ async def _nudge(sid, data):
         sound="default",
     )
     await send_silent_sync_push_to_room(code, sid)
-    await emit_to(sid, "buzz_sent_confirmation", {"status": "succès", "text": "Rappel envoyé."})
+    await emit_to(
+        sid, "buzz_sent_confirmation", {"status": "succès", "text": "Rappel envoyé."}
+    )
 
 
 @on("buzz")
@@ -132,11 +166,17 @@ async def _buzz(sid, data):
         return
     interne = str(message or "").startswith("PING_ROBOT_")
     if interne:
-        robot_log(f"[BUZZ][ROBOT_INTERNAL] from={sender['pseudo']} code={code} message={message}")
+        robot_log(
+            f"[BUZZ][ROBOT_INTERNAL] from={sender['pseudo']} code={code} message={message}"
+        )
 
     await emit_room(code, "buzz", {"message": message}, skip_sid=sid)
     if interne:
-        await emit_to(sid, "buzz_sent_confirmation", {"status": "succès", "text": "Message robot interne transmis."})
+        await emit_to(
+            sid,
+            "buzz_sent_confirmation",
+            {"status": "succès", "text": "Message robot interne transmis."},
+        )
         return
     log_room_event(code, "buzz", {"message": message})
 
@@ -148,7 +188,9 @@ async def _buzz(sid, data):
         data={"type": "buzz"},
     )
     await send_silent_sync_push_to_room(code, sid)
-    await emit_to(sid, "buzz_sent_confirmation", {"status": "succès", "text": "Buzz envoyé !"})
+    await emit_to(
+        sid, "buzz_sent_confirmation", {"status": "succès", "text": "Buzz envoyé !"}
+    )
 
 
 @on("app_diag")
@@ -234,13 +276,17 @@ async def _deconnexion(sid):
         groupe_spectateurs(code).discard(sid)
         if pilotes.get(code) == sid:
             pilotes.pop(code, None)
-            log(f"[ROLE] {code} : le pilote '{(info or {}).get('pseudo') or '?'}' est parti.")
+            log(
+                f"[ROLE] {code} : le pilote '{(info or {}).get('pseudo') or '?'}' est parti."
+            )
             await reattribuer_pilote(code)
 
     user = users.get(sid)
     if not user:
         return
-    log(f"[DECONNEXION] '{user['pseudo']}' s'est déconnecté. Tolérance {GRACE_MS // 60000} min.")
+    log(
+        f"[DECONNEXION] '{user['pseudo']}' s'est déconnecté. Tolérance {GRACE_MS // 60000} min."
+    )
     uid = socket_to_user_id.get(sid)
     if uid and uid in profiles:
         profiles[uid].last_seen = now_ms()
@@ -256,8 +302,13 @@ async def _relayer_ou_mettre_en_file(sid, code, event, data, exclure_pseudo=None
         livre = True
     if not livre:
         for pr in list(profiles.values()):
-            if pr.code == code and (exclure_pseudo is None or pr.pseudo != exclure_pseudo):
-                enqueue_for(user_id_of(code, pr.pseudo), {"type": event, "payload": data if data is not None else {}})
+            if pr.code == code and (
+                exclure_pseudo is None or pr.pseudo != exclure_pseudo
+            ):
+                enqueue_for(
+                    user_id_of(code, pr.pseudo),
+                    {"type": event, "payload": data if data is not None else {}},
+                )
 
 
 @on("request_meet")
@@ -268,11 +319,16 @@ async def _request_meet(sid, data):
         return
     sender = users.get(sid) or {}
     demandeur = p.get("from") or sender.get("pseudo") or "Ton contact"
-    await _relayer_ou_mettre_en_file(sid, code, "meet_request", {"from": demandeur}, exclure_pseudo=demandeur)
+    await _relayer_ou_mettre_en_file(
+        sid, code, "meet_request", {"from": demandeur}, exclure_pseudo=demandeur
+    )
     log_room_event(code, "meet_request", {"from": demandeur})
     await send_visible_push_to_room(
-        room_code=code, exclude_sid=sid, title="Demande “Se rejoindre”",
-        body=f"{demandeur} veut te rejoindre.", data={"type": "meet_request"},
+        room_code=code,
+        exclude_sid=sid,
+        title="Demande “Se rejoindre”",
+        body=f"{demandeur} veut te rejoindre.",
+        data={"type": "meet_request"},
     )
     await send_silent_sync_push_to_room(code, sid)
 
@@ -283,14 +339,19 @@ async def _accept_meet(sid, data):
     if not code:
         return
     accepteur = (users.get(sid) or {}).get("pseudo") or "Ton contact"
-    await _relayer_ou_mettre_en_file(sid, code, "meet_accepted", {"by": accepteur}, exclure_pseudo=accepteur)
+    await _relayer_ou_mettre_en_file(
+        sid, code, "meet_accepted", {"by": accepteur}, exclure_pseudo=accepteur
+    )
     log_room_event(code, "meet_accepted", {"by": accepteur})
 
     async def _push():
         try:
             await send_visible_push_to_room(
-                room_code=code, exclude_sid=sid, title="Se rejoindre ✅",
-                body=f"{accepteur} a accepté la demande.", data={"type": "meet_accepted"},
+                room_code=code,
+                exclude_sid=sid,
+                title="Se rejoindre ✅",
+                body=f"{accepteur} a accepté la demande.",
+                data={"type": "meet_accepted"},
             )
         except Exception as e:
             log("[MEET][accept][PUSH] erreur:", e)
@@ -308,7 +369,9 @@ async def _decline_meet(sid, data):
     if not code:
         return
     refuseur = (users.get(sid) or {}).get("pseudo") or "Ton contact"
-    await _relayer_ou_mettre_en_file(sid, code, "meet_declined", {"by": refuseur}, exclure_pseudo=refuseur)
+    await _relayer_ou_mettre_en_file(
+        sid, code, "meet_declined", {"by": refuseur}, exclure_pseudo=refuseur
+    )
     log_room_event(code, "meet_declined", {"by": refuseur})
 
 
@@ -324,7 +387,10 @@ async def _cancel_meet(sid, data):
     if not livre:
         for pr in list(profiles.values()):
             if pr.code == code:
-                enqueue_for(user_id_of(code, pr.pseudo), {"type": "meet_canceled", "payload": {}})
+                enqueue_for(
+                    user_id_of(code, pr.pseudo),
+                    {"type": "meet_canceled", "payload": {}},
+                )
     log_room_event(code, "meet_canceled", {})
 
 
@@ -339,7 +405,10 @@ async def _share_location(sid, data):
     moi = users.get(sid)
     for pr in list(profiles.values()):
         if pr.code == code and (not moi or pr.pseudo != moi["pseudo"]):
-            enqueue_for(user_id_of(code, pr.pseudo), {"type": "peer_location", "payload": {"coords": coords}})
+            enqueue_for(
+                user_id_of(code, pr.pseudo),
+                {"type": "peer_location", "payload": {"coords": coords}},
+            )
 
 
 LOBBY_DURATION_MS = 24 * 60 * 60 * 1000
@@ -395,7 +464,9 @@ async def broadcast_lobby_state(code: str) -> None:
     data = lobby_state_payload(code)
     await emit_room(code, "lobby_state", data)
     for m in data["members"]:
-        enqueue_for(user_id_of(code, m["pseudo"]), {"type": "lobby_state", "payload": data})
+        enqueue_for(
+            user_id_of(code, m["pseudo"]), {"type": "lobby_state", "payload": data}
+        )
 
 
 @on("lobby_join")
@@ -409,7 +480,12 @@ async def _lobby_join(sid, data):
     if as_host:
         lobby["hosts"].add(pseudo)
     await enter_room(sid, code)
-    await emit_room(code, "lobby_member_joined", {"code": code, "member": {"pseudo": pseudo}}, skip_sid=sid)
+    await emit_room(
+        code,
+        "lobby_member_joined",
+        {"code": code, "member": {"pseudo": pseudo}},
+        skip_sid=sid,
+    )
     log_room_event(code, "lobby_member_joined", {"member": {"pseudo": pseudo}})
     await broadcast_lobby_state(code)
 
@@ -427,8 +503,11 @@ async def _lobby_request(sid, data):
         if info.get("code") == code and info.get("pseudo") in lobby["hosts"]:
             await emit_to(autre, "lobby_request", {"from": de, "code": code})
     await send_visible_push_to_pseudos(
-        room_code=code, pseudos=list(lobby["hosts"]), title="Demande de connexion",
-        body=f"{de} veut se connecter avec vous", data={"type": "lobby_request", "from": de},
+        room_code=code,
+        pseudos=list(lobby["hosts"]),
+        title="Demande de connexion",
+        body=f"{de} veut se connecter avec vous",
+        data={"type": "lobby_request", "from": de},
     )
     log_room_event(code, "lobby_request", {"from": de})
 
@@ -444,7 +523,9 @@ async def _lobby_accept(sid, data):
     if not lobby or not acteur or acteur not in lobby["hosts"]:
         return
     lobby["members"].add(cible)
-    await emit_room(code, "lobby_member_joined", {"code": code, "member": {"pseudo": cible}})
+    await emit_room(
+        code, "lobby_member_joined", {"code": code, "member": {"pseudo": cible}}
+    )
     await broadcast_lobby_state(code)
     log_room_event(code, "lobby_member_joined", {"member": {"pseudo": cible}})
 
@@ -481,7 +562,9 @@ async def _lobby_leave(sid, data):
     if moi:
         lobby["members"].discard(moi)
         lobby["hosts"].discard(moi)
-        await emit_room(code, "lobby_member_left", {"code": code, "member": {"pseudo": moi}})
+        await emit_room(
+            code, "lobby_member_left", {"code": code, "member": {"pseudo": moi}}
+        )
         log_room_event(code, "lobby_member_left", {"member": {"pseudo": moi}})
 
     if p.get("expired"):
