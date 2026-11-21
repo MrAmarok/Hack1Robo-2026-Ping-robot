@@ -61,3 +61,6 @@ server/.venv/
 __pycache__/
 .pytest_cache/
 server/push-tokens.json
+
+# Donnees du capteur recues du robot
+server/capteur/

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import os
 import re
 from pathlib import Path
@@ -11,10 +12,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 
+from app.api.doc_http import DOC
+from app.core import config
 from app.core.config import DOSSIER_ALERTES, MTX_HOST, MTX_HTTP_PORT, PUBLIC_URL, REC_DOSSIER
 from app.core.logs import log, now_ms, robot_log
-from app.core.sio import emit_room
-from app.core.state import ensure_profile, log_room_event, mark_online, push_tokens, sids_du_salon, users
+from app.core.sio import emit_to
+from app.core.state import ensure_profile, log_room_event, mark_online, push_tokens, robot_du_salon
 from app.services.alertes import historique_alertes
 from app.services.push import add_persistent_token, get_tokens_for_room, is_expo_push_token
 from app.websocket.robot import is_drive_cmd
@@ -29,6 +32,13 @@ def _code(req: Request) -> str:
     return _PAS_CODE.sub("", str(req.query_params.get("code") or ""))
 
 
+def _jeton_http_valide(req: Request) -> bool:
+    if not config.ROBOT_HTTP_TOKEN:
+        return False
+    recu = req.headers.get("authorization", "")
+    return hmac.compare_digest(recu.encode(), f"Bearer {config.ROBOT_HTTP_TOKEN}".encode())
+
+
 _HOP = {"host", "content-length", "transfer-encoding", "connection", "keep-alive"}
 _mtx_client: httpx.AsyncClient | None = None
 
@@ -40,7 +50,10 @@ def _client_mtx() -> httpx.AsyncClient:
     return _mtx_client
 
 
-@router.api_route("/rtc/{chemin:path}", methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS", "PUT", "HEAD"])
+@router.api_route("/rtc/{chemin:path}", methods=["POST"], operation_id="rtc_post", **DOC["rtc"])
+@router.api_route("/rtc/{chemin:path}", methods=["PATCH"], operation_id="rtc_patch", **DOC["rtc"])
+@router.api_route("/rtc/{chemin:path}", methods=["DELETE"], operation_id="rtc_delete", **DOC["rtc"])
+@router.api_route("/rtc/{chemin:path}", methods=["GET", "OPTIONS", "PUT", "HEAD"], include_in_schema=False)
 async def rtc_proxy(chemin: str, request: Request):
     url = "/" + chemin + (f"?{request.url.query}" if request.url.query else "")
     headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP}
@@ -59,7 +72,7 @@ async def rtc_proxy(chemin: str, request: Request):
                              background=BackgroundTask(up.aclose))
 
 
-@router.get("/alerte-photo")
+@router.get("/alerte-photo", **DOC["alerte_photo"])
 async def alerte_photo(request: Request):
     code = _code(request)
     if not code:
@@ -72,7 +85,7 @@ async def alerte_photo(request: Request):
     return FileResponse(chemin, media_type="image/jpeg")
 
 
-@router.get("/alertes")
+@router.get("/alertes", **DOC["alertes"])
 async def alertes(request: Request):
     code = _code(request)
     if not code:
@@ -105,7 +118,7 @@ def _dossier_rec() -> str:
     return os.environ.get("REC_DOSSIER") or os.environ.get("REC_DIR") or REC_DOSSIER
 
 
-@router.get("/enregistrement")
+@router.get("/enregistrement", **DOC["enregistrement"])
 async def enregistrement(request: Request):
     nom = re.sub(r"[^A-Za-z0-9_.-]", "", str(request.query_params.get("f") or ""))
     if not nom or not nom.endswith(".mp4") or ".." in nom:
@@ -116,7 +129,7 @@ async def enregistrement(request: Request):
     return FileResponse(chemin, media_type="video/mp4", filename=nom)
 
 
-@router.get("/enregistrements")
+@router.get("/enregistrements", **DOC["enregistrements"])
 async def enregistrements(request: Request):
     code = _code(request)
     if not code:
@@ -139,7 +152,7 @@ async def enregistrements(request: Request):
     return {"videos": videos}
 
 
-@router.get("/ouvrir", response_class=HTMLResponse)
+@router.get("/ouvrir", response_class=HTMLResponse, **DOC["ouvrir"])
 async def ouvrir(request: Request):
     code = quote(str(request.query_params.get("code") or ""), safe="")
     return HTMLResponse(f"""<!doctype html>
@@ -170,7 +183,7 @@ async def _corps_json(request: Request) -> dict:
         return {}
 
 
-@router.post("/register-token")
+@router.post("/register-token", **DOC["register_token"])
 async def register_token(request: Request):
     b = await _corps_json(request)
     token = b.get("token")
@@ -188,7 +201,7 @@ async def register_token(request: Request):
     return {"message": "Token enregistré"}
 
 
-@router.post("/lobby-heartbeat")
+@router.post("/lobby-heartbeat", **DOC["lobby_heartbeat"])
 async def lobby_heartbeat(request: Request):
     b = await _corps_json(request)
     code, pseudo = b.get("code"), b.get("pseudo")
@@ -202,7 +215,7 @@ async def lobby_heartbeat(request: Request):
     return {"ok": True, "expiresAt": lobby["expiresAt"] if lobby else 0}
 
 
-@router.post("/robot-drive")
+@router.post("/robot-drive", **DOC["robot_drive"])
 async def robot_drive(request: Request):
     b = await _corps_json(request)
     code, de = b.get("code"), b.get("from")
@@ -212,16 +225,23 @@ async def robot_drive(request: Request):
     if not code or not is_drive_cmd(cmd):
         robot_log(f"[HTTP_ROBOT_DRIVE][DROP] id={cmd_id} code={bool(code)} cmd={cmd}")
         return JSONResponse({"ok": False, "error": "code/cmd invalide", "id": cmd_id}, status_code=400)
-    dest = sids_du_salon(code)
-    robot_log(f"[HTTP_ROBOT_DRIVE][ROUTE] id={cmd_id} recipients={len(dest)} -> "
-              + (",".join(f"{users[s]['pseudo']}@{s}" for s in dest if s in users) or "none"))
-    await emit_room(code, "robot_drive", {"id": cmd_id, "cmd": cmd, "by": de or "HTTP"})
-    log_room_event(code, "robot_drive", {"id": cmd_id, "cmd": cmd, "by": de or "HTTP"})
-    return {"ok": True, "id": cmd_id, "cmd": cmd, "recipients": len(dest),
-            "users": [users[s]["pseudo"] for s in dest if s in users]}
+    if not _jeton_http_valide(request):
+        # Pas de session ici, donc pas de controle du pilote possible : sans jeton on ne relaie plus.
+        # Reponse 200 quand meme : les anciennes versions de l'app appellent cette route a chaque commande
+        # (en doublon du socket) et afficheraient une erreur pour tout autre code.
+        robot_log(f"[HTTP_ROBOT_DRIVE][IGNORE] id={cmd_id} code={code} : pas de jeton, non relaye.")
+        return {"ok": False, "id": cmd_id, "cmd": cmd, "relaye": False,
+                "error": "pilotage HTTP desactive sans jeton : utiliser l'evenement Socket.IO drive"}
+    robot = robot_du_salon(str(code))
+    if not robot:
+        return {"ok": False, "id": cmd_id, "cmd": cmd, "relaye": False, "error": "aucun robot connecte"}
+    await emit_to(robot, "robot_drive", {"id": cmd_id, "cmd": cmd, "by": de or "HTTP"})
+    log_room_event(str(code), "robot_drive", {"id": cmd_id, "cmd": cmd, "by": de or "HTTP"})
+    robot_log(f"[HTTP_ROBOT_DRIVE][EMIT] id={cmd_id} cmd={cmd} -> {robot}")
+    return {"ok": True, "id": cmd_id, "cmd": cmd, "relaye": True}
 
 
-@router.post("/bg-sync")
+@router.post("/bg-sync", **DOC["bg_sync"])
 async def bg_sync(request: Request):
     b = await _corps_json(request)
     if not b.get("code") or not b.get("pseudo"):
@@ -233,7 +253,7 @@ audio_consumers: dict[str, set[asyncio.Queue]] = {}
 _FILE_MAX = 64
 
 
-@router.post("/robot-audio")
+@router.post("/robot-audio", **DOC["robot_audio_post"])
 async def robot_audio_post(request: Request):
     code = str(request.query_params.get("code") or "").strip()
     if not code:
@@ -253,7 +273,7 @@ async def robot_audio_post(request: Request):
     return Response(status_code=200)
 
 
-@router.get("/robot-audio")
+@router.get("/robot-audio", **DOC["robot_audio_get"])
 async def robot_audio_get(request: Request):
     code = str(request.query_params.get("code") or "").strip()
     if not code:
@@ -288,11 +308,21 @@ async def robot_audio_get(request: Request):
     )
 
 
-@router.get("/", response_class=PlainTextResponse)
+@router.get("/", response_class=PlainTextResponse, **DOC["racine"])
 async def racine():
     return "OK"
 
 
-@router.get("/health")
+@router.get("/health", **DOC["health"])
 async def health():
     return {"status": "ok"}
+
+
+@router.api_route("/socket/{evenement}", methods=["GET", "POST"], include_in_schema=False)
+async def socket_pas_http(evenement: str):
+    nom = re.sub(r"[^a-z_]", "", evenement)[:64]
+    return JSONResponse(
+        {"erreur": f"« {nom} » est un événement Socket.IO, pas une route HTTP : "
+                   f"socket.emit('{nom}', données) ou socket.on('{nom}', …). Voir /docs."},
+        status_code=400,
+    )

@@ -29,6 +29,7 @@ const { Camera } = require('./camera');
 const { Audio } = require('./audio');
 const { Voice } = require('./voice');
 const { Tts } = require('./tts');
+const { CanalCapteur } = require('./capteur');
 
 // Les numeros ALSA (card 0, card 1...) changent selon l'ordre de detection des
 // peripheriques USB ; on vise donc la carte par son NOM, stable au rebranchement.
@@ -279,6 +280,13 @@ const CONFIG = {
   // Ajuster par pas de 2 a 3 %, batterie bien chargee, sol plat.
   MOTOR_TRIM_LEFT: Number(process.env.MOTOR_TRIM_LEFT || 100),
   MOTOR_TRIM_RIGHT: Number(process.env.MOTOR_TRIM_RIGHT || 100),
+
+  // Envoi des donnees du capteur au serveur (capteur.js, WebSocket /ws/capteur).
+  CAPTEUR_ENABLE: String(process.env.CAPTEUR_ENABLE || 'true').toLowerCase() === 'true',
+  // Session (fichier cote serveur). Vide = une nouvelle a chaque demarrage.
+  CAPTEUR_SESSION: process.env.CAPTEUR_SESSION || '',
+  // Meme valeur que ROBOT_KEY sur le serveur, si elle y est configuree.
+  ROBOT_KEY: process.env.ROBOT_KEY || '',
 };
 
 if (!CONFIG.CODE) {
@@ -1529,10 +1537,27 @@ async function chargerItineraire(depart, arrivee) {
 let lastObstacleCm = null;
 let sensorSeen = false;
 
+// Donnees du capteur pour la carte (capteur.js) : lignes
+// x_m,y_m,heading_deg,sensor_angle_deg,distance_cm envoyees au serveur par
+// WebSocket. Le code de Pauline appelle capteur.envoyer('0,0,0,0,143') ;
+// les lignes de ce format ecrites par l'Arduino partent aussi toutes seules.
+const capteur = CONFIG.CAPTEUR_ENABLE
+  ? new CanalCapteur({
+      serverUrl: CONFIG.SERVER_URL,
+      code: CONFIG.CODE,
+      cle: CONFIG.ROBOT_KEY,
+      session: CONFIG.CAPTEUR_SESSION,
+      log,
+    })
+  : null;
+
 const arduino = new Arduino({
   port: CONFIG.ARDUINO_PORT,
   baud: CONFIG.ARDUINO_BAUD,
   log,
+  onLigneCapteur: (ligne) => {
+    if (capteur) capteur.envoyer(ligne);
+  },
   onSensor: (cm) => {
     lastObstacleCm = cm;
     if (!sensorSeen) {
@@ -1712,6 +1737,9 @@ Commandes:
   accept             accepter une demande
   stop / cancel      annuler "Se rejoindre"
   pos                afficher la position GPS
+  capteur            etat de l'envoi des donnees du capteur
+  capteur <ligne>    envoyer une ligne x_m,y_m,heading_deg,sensor_angle_deg,distance_cm
+  capteur session    commencer une nouvelle session (nouveau fichier sur le serveur)
   ports              afficher les ports serie
   msg <texte>        envoyer un message
   help               aide
@@ -1779,6 +1807,16 @@ rl.on('line', (input) => {
   const cmd = (cmdRaw || '').toLowerCase();
 
   switch (cmd) {
+    case 'capteur': {
+      if (!capteur) {
+        log('Capteur desactive (CAPTEUR_ENABLE=false).');
+        break;
+      }
+      if (!rest.length) log(`Capteur: ${JSON.stringify(capteur.etat())}`);
+      else if (rest[0].toLowerCase() === 'session') capteur.nouvelleSession(rest[1]);
+      else if (capteur.envoyer(rest.join(''))) log(`Capteur: ligne "${rest.join('')}" mise en file.`);
+      break;
+    }
     case 'drive':
       sendDrive(rest[0]);
       break;

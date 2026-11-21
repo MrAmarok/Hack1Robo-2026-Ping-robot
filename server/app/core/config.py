@@ -62,7 +62,16 @@ def _mtx_pass() -> str:
 
 MTX_PASS = _mtx_pass()
 
+# Secret partage avec les robots, a envoyer dans `pair` (champ `cle`). Vide = mode compatible :
+# tout socket qui se declare robot est cru, comme avant. A remplir une fois les robots a jour.
+ROBOT_KEY = env("ROBOT_KEY", "") or ""
+# Jeton pour piloter par HTTP (POST /robot-drive, en-tete `Authorization: Bearer <jeton>`).
+# Vide = la route repond mais ne relaie plus rien.
+ROBOT_HTTP_TOKEN = env("ROBOT_HTTP_TOKEN", "") or ""
+
 DOSSIER_ALERTES = env("ALERTES_DIR", "/root/server/alertes")
 FICHIER_ALERTES = env("ALERTES_FICHIER", "/root/server/alertes.json")
 PUSH_FICHIER = env("PUSH_FICHIER", str(SERVER_DIR / "push-tokens.json"))
 REC_DOSSIER = env("REC_DOSSIER", "/root/enregistrements")
+CAPTEUR_DIR = env("CAPTEUR_DIR", str(SERVER_DIR / "capteur"))
+CAPTEUR_MAX_MO = env_int("CAPTEUR_MAX_MO", 50)

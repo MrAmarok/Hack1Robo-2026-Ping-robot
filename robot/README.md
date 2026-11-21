@@ -78,6 +78,9 @@ Options (variables d'environnement) :
 | `OBSTACLE_STOP_CM` | `25` | Distance d'évitement d'obstacle (cm) |
 | `COMPASS_ENABLE` | `true` | Mettre `false` pour ignorer la boussole et naviguer au cap GPS |
 | `COMPASS_INVERT` | `false` | Mettre `true` si la boussole tourne dans le sens inverse |
+| `CAPTEUR_ENABLE` | `true` | Envoi des données du capteur au serveur (WebSocket `/ws/capteur`, voir `capteur.js`) |
+| `CAPTEUR_SESSION` | — | Session (fichier côté serveur). Vide = une nouvelle à chaque démarrage |
+| `ROBOT_KEY` | — | Même valeur que `ROBOT_KEY` du serveur, si elle y est configurée |
 
 Exemple complet :
 

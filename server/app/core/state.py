@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 from dataclasses import dataclass
 from typing import Any
 
+from app.core import config
 from app.core.logs import log, now_ms
 from app.core.sio import emit_room, emit_to, is_connected
 
@@ -73,8 +75,26 @@ async def reattribuer_pilote(code: str) -> bool:
     return False
 
 
+def cle_robot_valide(cle: Any) -> bool:
+    if not config.ROBOT_KEY:
+        return True
+    return isinstance(cle, str) and hmac.compare_digest(cle.encode(), config.ROBOT_KEY.encode())
+
+
+def robot_du_salon(code: str) -> str | None:
+    """Socket du robot de ce salon (le plus recent encore connecte)."""
+    for sid in reversed(sids_du_salon(code)):
+        if sid in robots and is_connected(sid):
+            return sid
+    return None
+
+
 async def marquer_robot(sid: str) -> None:
     if sid in robots:
+        return
+    if config.ROBOT_KEY:
+        # Avec une cle configuree, seul `pair` + cle fait d'un socket un robot :
+        # sinon n'importe qui enverrait un robot_status pour echapper au controle du pilote.
         return
     robots.add(sid)
     info = users.get(sid)
@@ -87,14 +107,27 @@ async def marquer_robot(sid: str) -> None:
     groupe_spectateurs(info["code"]).discard(sid)
 
 
-async def refuse_si_pas_pilote(sid: str, nom: str) -> bool:
+async def refuse_si_pas_pilote(sid: str, nom: str, data: Any = None, prevenir: bool = True) -> bool:
+    """Refuse si l'emetteur n'est pas le pilote, ou s'il vise un autre salon que le sien.
+
+    `data` est le message recu : son `code` doit etre celui de la session. Sans ce controle, le pilote
+    d'un salon quelconque pouvait commander le robot de n'importe quel autre salon dont il connaissait le code.
+    `prevenir=False` refuse sans envoyer `acces_refuse_commande` (pour un doublon d'une commande deja signalee).
+    """
     if sid in robots:
         return False
-    if est_pilote(sid):
-        return False
     info = users.get(sid) or {}
-    log(f"[ROLE] commande \"{nom}\" refusee a {info.get('pseudo') or sid} : spectateur.")
-    await emit_to(sid, "acces_refuse_commande", {"commande": nom})
+    code = data.get("code") if isinstance(data, dict) else None
+    autre_salon = code is not None and str(code) != info.get("code")
+    if est_pilote(sid) and not autre_salon:
+        return False
+    if autre_salon:
+        log(f"[ROLE] commande \"{nom}\" refusee a {info.get('pseudo') or sid} : "
+            f"salon '{str(code)[:64]}' different du sien.")
+    else:
+        log(f"[ROLE] commande \"{nom}\" refusee a {info.get('pseudo') or sid} : spectateur.")
+    if prevenir:
+        await emit_to(sid, "acces_refuse_commande", {"commande": nom})
     return True
 
 
