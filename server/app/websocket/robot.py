@@ -7,11 +7,13 @@ import httpx
 
 from app.core.config import MTX_HOST, MTX_HTTP_PORT, MTX_PASS, MTX_USER
 from app.core.logs import log, now_ms, robot_log
-from app.core.sio import emit_room, emit_to, on, payload
+from app.core.sio import call, emit_room, emit_to, on, payload
 from app.core.state import (
+    est_pilote,
     log_room_event,
     marquer_robot,
     refuse_si_pas_pilote,
+    robot_du_salon,
     sids_du_salon,
     users,
 )
@@ -38,15 +40,56 @@ def _clamp_servo(v):
     return max(0, min(180, round(n)))
 
 
+DRIVE_ACK_TIMEOUT_S = 1.5
+
+
+@on("drive")
+async def _drive(sid, data):
+    """Canal unique de pilotage.
+
+    Le salon est celui de la session (le `code` du message est ignore) et seul son pilote conduit.
+    Avec `ack: true` (appui, relachement, vitesse), le serveur attend la reponse du robot et la renvoie
+    dans l'accuse. Sans (maintien du bouton, ~4/s), il relaie au robot sans rien attendre.
+    """
+    info = users.get(sid)
+    if not info or not est_pilote(sid):
+        robot_log(f"[DRIVE][REFUS] socket={sid} : pas pilote.")
+        return {"ok": False, "erreur": "seul le pilote peut conduire"}
+    code = info["code"]
+    p = payload(data)
+    cmd = str(p.get("cmd") or "").strip().upper()
+    if not is_drive_cmd(cmd):
+        return {"ok": False, "cmd": cmd, "erreur": "commande inconnue"}
+    robot = robot_du_salon(code)
+    if not robot:
+        return {"ok": False, "cmd": cmd, "erreur": "robot hors ligne"}
+    if not p.get("ack"):
+        await emit_to(robot, "drive", {"cmd": cmd})
+        return None
+
+    log_room_event(code, "robot_drive", {"cmd": cmd, "by": info["pseudo"]})
+    r = await call(robot, "drive", {"cmd": cmd}, timeout=DRIVE_ACK_TIMEOUT_S)
+    robot_log(f"[DRIVE] {code} {cmd} par {info['pseudo']} -> {r!r}")
+    if not isinstance(r, dict):
+        return {"ok": False, "cmd": cmd, "erreur": "le robot n'a pas repondu"}
+    rep = {"ok": bool(r.get("ok")), "cmd": cmd}
+    if "arduino" in r:
+        rep["arduino"] = bool(r["arduino"])
+    if not rep["ok"]:
+        rep["erreur"] = str(r.get("erreur") or "commande non transmise a l'Arduino")[:200]
+    return rep
+
+
 @on("robot_drive")
 async def _robot_drive(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_drive"):
+    """Ancien canal, garde pour les versions de l'app qui ne connaissent pas `drive`."""
+    if await refuse_si_pas_pilote(sid, "robot_drive", data):
         return
     p = payload(data)
     sender = users.get(sid)
-    code = p.get("code")
     cmd = str(p.get("cmd") or "").strip().upper()
     cmd_id = str(p.get("id") or f"{cmd}-{now_ms()}")
+    code = (sender or {}).get("code")
     robot_log(
         f"[ROBOT_DRIVE][IN] id={cmd_id} socket={sid} sender={(sender or {}).get('pseudo', '?')} "
         f"code={code or '?'} cmd={cmd}"
@@ -57,15 +100,9 @@ async def _robot_drive(sid, data):
         )
         return
 
-    destinataires = sids_du_salon(code, sauf=sid)
-    robot_log(
-        f"[ROBOT_DRIVE][ROUTE] id={cmd_id} recipients={len(destinataires)} -> "
-        + (
-            ",".join(f"{users[s]['pseudo']}@{s}" for s in destinataires if s in users)
-            or "none"
-        )
-    )
-    if not destinataires:
+    robot = robot_du_salon(code)
+    if not robot:
+        robot_log(f"[ROBOT_DRIVE][NO_ROBOT] id={cmd_id} code={code}")
         await emit_to(
             sid,
             "robot_drive_status",
@@ -79,14 +116,9 @@ async def _robot_drive(sid, data):
         )
         return
 
-    await emit_room(
-        code,
-        "robot_drive",
-        {"id": cmd_id, "cmd": cmd, "by": sender["pseudo"]},
-        skip_sid=sid,
-    )
+    await emit_to(robot, "robot_drive", {"id": cmd_id, "cmd": cmd, "by": sender["pseudo"]})
     log_room_event(code, "robot_drive", {"cmd": cmd, "by": sender["pseudo"]})
-    robot_log(f"[ROBOT_DRIVE][EMIT] id={cmd_id} cmd={cmd} by={sender['pseudo']}")
+    robot_log(f"[ROBOT_DRIVE][EMIT] id={cmd_id} cmd={cmd} by={sender['pseudo']} -> {robot}")
     await emit_to(
         sid, "robot_drive_confirmation", {"id": cmd_id, "ok": True, "cmd": cmd}
     )
@@ -116,6 +148,7 @@ async def _robot_drive_status(sid, data):
             "message": p.get("message") or "",
             "by": (sender or {}).get("pseudo") or "Robot",
         },
+        skip_sid=sid,
     )
 
 
@@ -190,7 +223,7 @@ async def _robot_camera(sid, data):
 
 @on("robot_cam_move")
 async def _robot_cam_move(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_cam_move"):
+    if await refuse_si_pas_pilote(sid, "robot_cam_move", data):
         return
     p = payload(data)
     code = p.get("code")
@@ -253,7 +286,7 @@ async def _rtc_offer(sid, data):
 
 @on("rtc_publish_offer")
 async def _rtc_publish_offer(sid, data):
-    if await refuse_si_pas_pilote(sid, "rtc_publish_offer"):
+    if await refuse_si_pas_pilote(sid, "rtc_publish_offer", data):
         return
     p = payload(data)
     code, sdp = p.get("code"), p.get("sdp")
@@ -276,7 +309,7 @@ async def _rtc_publish_offer(sid, data):
 
 @on("robot_talk_live")
 async def _robot_talk_live(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_talk_live"):
+    if await refuse_si_pas_pilote(sid, "robot_talk_live", data):
         return
     p = payload(data)
     log(
@@ -312,7 +345,7 @@ async def _robot_listen(sid, data):
 
 @on("robot_say")
 async def _robot_say(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_say"):
+    if await refuse_si_pas_pilote(sid, "robot_say", data):
         return
     p = payload(data)
     if p.get("code"):
@@ -326,7 +359,7 @@ async def _robot_say(sid, data):
 
 @on("robot_voice")
 async def _robot_voice(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_voice"):
+    if await refuse_si_pas_pilote(sid, "robot_voice", data):
         return
     p = payload(data)
     code, b64 = p.get("code"), p.get("b64")
@@ -340,7 +373,7 @@ async def _robot_voice(sid, data):
 
 @on("robot_nav")
 async def _robot_nav(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_nav"):
+    if await refuse_si_pas_pilote(sid, "robot_nav", data):
         return
     p = payload(data)
     if p.get("code"):
@@ -366,7 +399,7 @@ async def _robot_nav_status(sid, data):
 
 @on("robot_rt")
 async def _robot_rt(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_rt"):
+    if await refuse_si_pas_pilote(sid, "robot_rt", data):
         return
     p = payload(data)
     if p.get("code"):
@@ -375,7 +408,7 @@ async def _robot_rt(sid, data):
 
 @on("robot_record_hd")
 async def _robot_record_hd(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_record_hd"):
+    if await refuse_si_pas_pilote(sid, "robot_record_hd", data):
         return
     p = payload(data)
     if p.get("code"):
@@ -393,7 +426,7 @@ async def _robot_record_hd_status(sid, data):
 
 @on("robot_ronde")
 async def _robot_ronde(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_ronde"):
+    if await refuse_si_pas_pilote(sid, "robot_ronde", data):
         return
     p = payload(data)
     if not p.get("code") or not p.get("action"):
@@ -413,7 +446,7 @@ async def _robot_ronde_status(sid, data):
 
 @on("robot_stop_all")
 async def _robot_stop_all(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_stop_all"):
+    if await refuse_si_pas_pilote(sid, "robot_stop_all", data):
         return
     code = payload(data).get("code")
     if not code:
@@ -439,7 +472,7 @@ async def _robot_stop_all(sid, data):
 
 @on("robot_mode")
 async def _robot_mode(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_mode"):
+    if await refuse_si_pas_pilote(sid, "robot_mode", data):
         return
     p = payload(data)
     if p.get("code"):
@@ -463,7 +496,7 @@ async def _robot_mode_status(sid, data):
 
 @on("robot_alarme")
 async def _robot_alarme(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_alarme"):
+    if await refuse_si_pas_pilote(sid, "robot_alarme", data):
         return
     p = payload(data)
     if p.get("code"):
