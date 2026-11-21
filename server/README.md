@@ -32,6 +32,28 @@ Ajouter une dépendance : `uv add <paquet>` (ou `uv add --dev <paquet>` pour les
 
 Healthcheck : `GET /` → `OK`, `GET /health` → `{"status":"ok"}`.
 
+## Install as a systemd service
+
+On the VPS, run the installer from the new checkout as the account that should
+run the server. Install `uv` for that account first. If migrating from the old
+Node server, copy its settings into `server/.env` and stop its PM2 application
+before starting the service. Keep any existing data paths the new server needs.
+
+```bash
+cd server
+./install-service.sh
+curl -fsS http://127.0.0.1:3000/health
+sudo journalctl -u ping-server -f
+```
+
+The installer syncs the locked dependencies, writes `ping-server.service`,
+starts it, and enables it at boot. It uses port 3000. Run
+`PORT=3002 ./install-service.sh` to use a different port. This install setting
+takes precedence over `PORT` in `.env`.
+
+Run the installer again after updating the checkout to sync dependencies and
+restart the service. Reuse the same `PORT` value if you chose a custom port.
+
 ## Organisation
 
 | Fichier | Rôle | Ancien emplacement |
