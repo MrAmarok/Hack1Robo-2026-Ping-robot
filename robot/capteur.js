@@ -1,18 +1,3 @@
-// capteur.js - Tuyau WebSocket robot -> serveur pour les donnees du capteur.
-//
-// Une donnee = une ligne au format de map_sonar.py :
-//   x_m,y_m,heading_deg,sensor_angle_deg,distance_cm      ex. "0,0,0,0,143"
-// distance_cm vide ("0,0,0,0,") = pas d'echo.
-//
-// Utilisation (code de Pauline) :
-//   capteur.envoyer('0,0,0,0,143');            // une ligne
-//   capteur.envoyer([0.5, 0, 90, -30, 87.5]);  // ou un tableau de 5 valeurs (null = pas d'echo)
-//   capteur.nouvelleSession();                 // nouveau fichier cote serveur
-//
-// Les lignes sont regroupees et envoyees toutes les 200 ms sur
-// ws://<serveur>/ws/capteur. Une ligne n'est oubliee qu'une fois accusee par
-// le serveur : pendant une coupure, elles s'accumulent et repartent dans
-// l'ordre a la reconnexion.
 'use strict';
 
 const WS = globalThis.WebSocket || require('ws');
@@ -92,9 +77,6 @@ class CanalCapteur {
         if (/cle|session|code/.test(m.erreur || '')) this.arrete = true;
       }
     };
-    // Le WebSocket natif de Node 22 n'emet que "error" (sans "close") quand la
-    // connexion est refusee : les deux evenements menent donc a la reconnexion,
-    // une seule fois grace au test this.ws === ws.
     ws.onerror = () => this.perdu(ws);
     ws.onclose = () => this.perdu(ws);
   }

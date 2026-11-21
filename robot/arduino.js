@@ -5,8 +5,6 @@
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 
-// Ligne du capteur au format de map_sonar.py : x_m,y_m,heading_deg,sensor_angle_deg,distance_cm
-// (distance vide = pas d'echo). Si le firmware en ecrit, elles partent telles quelles au serveur.
 const NB = '\\s*-?\\d+(?:\\.\\d+)?\\s*';
 const RE_LIGNE_CAPTEUR = new RegExp(`^${NB},${NB},${NB},${NB},\\s*(?:\\d+(?:\\.\\d+)?)?\\s*$`);
 

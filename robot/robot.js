@@ -281,11 +281,8 @@ const CONFIG = {
   MOTOR_TRIM_LEFT: Number(process.env.MOTOR_TRIM_LEFT || 100),
   MOTOR_TRIM_RIGHT: Number(process.env.MOTOR_TRIM_RIGHT || 100),
 
-  // Envoi des donnees du capteur au serveur (capteur.js, WebSocket /ws/capteur).
   CAPTEUR_ENABLE: String(process.env.CAPTEUR_ENABLE || 'true').toLowerCase() === 'true',
-  // Session (fichier cote serveur). Vide = une nouvelle a chaque demarrage.
   CAPTEUR_SESSION: process.env.CAPTEUR_SESSION || '',
-  // Meme valeur que ROBOT_KEY sur le serveur, si elle y est configuree.
   ROBOT_KEY: process.env.ROBOT_KEY || '',
 };
 
@@ -1537,10 +1534,6 @@ async function chargerItineraire(depart, arrivee) {
 let lastObstacleCm = null;
 let sensorSeen = false;
 
-// Donnees du capteur pour la carte (capteur.js) : lignes
-// x_m,y_m,heading_deg,sensor_angle_deg,distance_cm envoyees au serveur par
-// WebSocket. Le code de Pauline appelle capteur.envoyer('0,0,0,0,143') ;
-// les lignes de ce format ecrites par l'Arduino partent aussi toutes seules.
 const capteur = CONFIG.CAPTEUR_ENABLE
   ? new CanalCapteur({
       serverUrl: CONFIG.SERVER_URL,
