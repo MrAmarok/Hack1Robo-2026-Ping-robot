@@ -2,6 +2,7 @@
   "name": "ping-robot",
   "version": "1.0.0",
   "private": true,
+  "license": "CC-BY-NC-SA-4.0",
   "description": "Client robot (Raspberry Pi 3) pour l'app Ping : appairage, GPS et Se rejoindre",
   "main": "robot.js",
   "scripts": {
@@ -11,6 +12,7 @@
     "@serialport/parser-readline": "^12.0.0",
     "i2c-bus": "^5.2.3",
     "serialport": "^12.0.0",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "ws": "^8.17.1"
   }
 }

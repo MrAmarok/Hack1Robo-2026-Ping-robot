@@ -162,7 +162,7 @@ def arreter(code: str) -> None:
 
 @on("robot_record")
 async def _robot_record(sid, data):
-    if await refuse_si_pas_pilote(sid, "robot_record"):
+    if await refuse_si_pas_pilote(sid, "robot_record", data):
         return
     p = payload(data)
     code = p.get("code")

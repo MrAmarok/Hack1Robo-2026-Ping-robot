@@ -269,7 +269,7 @@ async def _alerte_appel(sid, data):
     p = payload(data)
     if sid in robots:
         return
-    if await refuse_si_pas_pilote(sid, "alerte_appel"):
+    if await refuse_si_pas_pilote(sid, "alerte_appel", data):
         return
     code = (users.get(sid) or {}).get("code")
     if not code:

@@ -12,6 +12,7 @@ os.environ["PUSH_FICHIER"] = os.path.join(_TMP, "push-tokens.json")
 os.environ["REC_DIR"] = os.path.join(_TMP, "rec")
 os.environ["REC_DOSSIER"] = os.path.join(_TMP, "rec")
 os.environ["MTX_HTTP_PORT"] = "1"
+os.environ["CAPTEUR_DIR"] = os.path.join(_TMP, "capteur")
 for _cle in (
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",

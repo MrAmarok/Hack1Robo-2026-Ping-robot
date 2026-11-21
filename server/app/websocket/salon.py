@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from app.core import config
 from app.core.logs import log, now_ms, robot_log
 from app.core.sio import (
     emit_room,
@@ -18,6 +19,7 @@ from app.core.sio import (
 )
 from app.core.state import (
     GRACE_MS,
+    cle_robot_valide,
     deliver_queue_to,
     enqueue_for,
     ensure_profile,
@@ -33,6 +35,7 @@ from app.core.state import (
     profiles,
     push_tokens,
     reattribuer_pilote,
+    refuse_si_pas_pilote,
     robots,
     sids_du_salon,
     socket_to_user_id,
@@ -64,6 +67,12 @@ async def _pair(sid, data):
     code = str(code)
 
     if p.get("robot"):
+        if not cle_robot_valide(p.get("cle")):
+            log(f"[ROLE] {code} : '{pseudo}' se declare robot sans la bonne cle, refuse.")
+            await emit_to(sid, "pair_refuse", {"raison": "cle robot invalide"})
+            return
+        if not config.ROBOT_KEY:
+            log(f"[ROLE] {code} : robot '{pseudo}' accepte sans cle (ROBOT_KEY non configuree).")
         robots.add(sid)
 
     if sid not in robots:
@@ -157,12 +166,20 @@ async def _nudge(sid, data):
     )
 
 
+_BUZZ_COMMANDES = ("PING_ROBOT_DRIVE:", "PING_ROBOT_CAM:")
+
+
 @on("buzz")
 async def _buzz(sid, data):
     p = payload(data)
     sender = users.get(sid)
     code, message = p.get("code"), p.get("message")
     if not sender or not code:
+        return
+    # Ancien canal de secours du pilotage et de la camera : memes regles que robot_drive. Refus silencieux :
+    # l'app envoie la meme commande par robot_drive, dont le refus s'affiche deja.
+    if str(message or "").startswith(_BUZZ_COMMANDES) and await refuse_si_pas_pilote(
+            sid, "buzz", data, prevenir=False):
         return
     interne = str(message or "").startswith("PING_ROBOT_")
     if interne:

@@ -60,6 +60,7 @@ type CameraModalProps = {
   ecartCap: number | null;
   capActuel: number | null;
   robotLink: "connecting" | "connected" | "disconnected";
+  robotCommandStatus: string;
   speedPct: number;
   setSpeedPct: React.Dispatch<React.SetStateAction<number>>;
   sendRobotSpeed: (pct: number) => void;
@@ -130,6 +131,7 @@ export function CameraModal({
   ecartCap,
   capActuel,
   robotLink,
+  robotCommandStatus,
   speedPct,
   setSpeedPct,
   sendRobotSpeed,
@@ -308,10 +310,15 @@ export function CameraModal({
                   <PilotButton label="Options" onPress={openOptions} style={pilot.fill} />
                 </View>
               )}
-              {(rtActif || !estPilote || (estPilote && capActuel != null)) && (
+              {(rtActif || !estPilote || capActuel != null || !!robotCommandStatus) && (
                 <View style={pilot.badgeRow} pointerEvents="none">
                   {rtActif && <Text style={pilot.statusText}>{rtEveille ? 'Solana écoute' : `En veille · ${rtPhrase}`}</Text>}
                   {!estPilote && <Text style={pilot.statusText}>{role === 'attente' ? 'Demande en attente' : 'Spectateur'}</Text>}
+                  {estPilote && !!robotCommandStatus && (
+                    <Text accessibilityLiveRegion="polite" numberOfLines={1} style={pilot.statusText}>
+                      {robotCommandStatus}
+                    </Text>
+                  )}
                   {estPilote && capActuel != null && (
                     <Text style={pilot.statusText}>
                       {ecartCap == null
@@ -350,7 +357,11 @@ export function CameraModal({
                     <View style={pilot.map}>
                       {mapTab === 'gps' ? <PilotGpsMap {...gps} /> : (
                         <SonarMapView
+                          key={pairCode}
                           connected={socketOnline}
+                          canViewScans={estPilote || role === 'spectateur'}
+                          isPilot={estPilote}
+                          socketRef={socketRef}
                           snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
                         />
                       )}

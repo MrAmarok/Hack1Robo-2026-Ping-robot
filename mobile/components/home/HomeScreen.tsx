@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { SonarSnapshot } from '@/components/SonarMapView';
-import type { RobotStatus, Coord, AlerteHisto, VideoServeur, RobotDriveCommand, NotifStatus, Mode } from './types';
+import type { RobotStatus, Coord, AlerteHisto, VideoServeur, PendingRobotCommand, NotifStatus, Mode } from './types';
 import { AUDIO_STREAM_BASE, SOCKET_URL, keepAwake } from './config';
 import { PanResponder, Dimensions, useWindowDimensions, Alert, AppState, Platform, ActionSheetIOS, ScrollView, View, Text } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -304,7 +304,7 @@ export default function HomeScreen() {
   const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const robotHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pendingRobotCmdRef = useRef<{ id: string; cmd: RobotDriveCommand } | null>(null);
+  const pendingRobotCmdRef = useRef<PendingRobotCommand | null>(null);
   // Horodatage de la derniere image caméra affichée (pour limiter les re-renders)
   const lastFrameAtRef = useRef(0);
 
@@ -450,8 +450,6 @@ export default function HomeScreen() {
     pushRobotLog,
     robotLastSeenAtRef,
     setRobotHeartbeat,
-    setRobotCommandStatus,
-    pendingRobotCmdRef,
     setCameraOn,
     setCamFullscreen,
     setListening,
@@ -568,7 +566,6 @@ export default function HomeScreen() {
   }, []);
 
   const {
-    sendRobotDrive,
     sendRobotSpeed,
     startCamHold,
     stopCamHold,
@@ -585,7 +582,6 @@ export default function HomeScreen() {
     navActive,
     setNavActive,
     pendingRobotCmdRef,
-    pseudoRef,
     setRobotCommandStatus,
     isLandscape,
     camFullscreen,
@@ -927,9 +923,6 @@ export default function HomeScreen() {
   //   - la conversation en direct, qui peut commander les trois premiers.
   // Un simple "stop" moteur n'en coupe qu'une : les boucles du serveur
   // reenvoient un ordre 400 ms plus tard et le robot repart. D'ou robot_stop_all.
-  //
-  // sendRobotDrive('S') part en plus par ses trois canaux habituels (socket,
-  // buzz, HTTP) : si la liaison socket est mauvaise, il en reste deux.
   const arretUrgence = () => {
     if (robotHoldTimerRef.current) {
       clearInterval(robotHoldTimerRef.current);
@@ -952,8 +945,7 @@ export default function HomeScreen() {
     setRtEveille(false);
     setAlarmeOn(false);
     pushRobotLog('ARRET URGENCE');
-    sendRobotDrive('S');
-    setRobotCommandStatus('ARRET D URGENCE envoye');
+    stopRobotDriveHold();
   };
 
   // Rondes : une seule voie, avec une action nommee. L'app n'anticipe jamais
@@ -1173,6 +1165,7 @@ export default function HomeScreen() {
         role={role}
         startRobotDriveHold={startRobotDriveHold}
         stopRobotDriveHold={stopRobotDriveHold}
+        robotCommandStatus={robotCommandStatus}
         videosChargement={videosChargement}
         videosListe={videosListe}
         histoChargement={histoChargement}

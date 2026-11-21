@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager, suppress
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from app.core.config import DEFAULT_PORT, PORT
 from app.core.logs import log
@@ -16,6 +17,10 @@ from app.core.sio import sio
 from app.websocket import robot, salon, sonar
 from app.services import alertes, push
 from app.api.routes import router as http_router
+from app.api.capteur import router as capteur_router
+from app.api.doc_http import TAGS_HTTP
+from app.api.doc_socket import INTRODUCTION, THEMES, operations
+from app.api.doc_capteur import PROTOCOLE, TAG_HTTP, TAG_WS, operation_ws
 
 GESTIONNAIRES_SOCKET = (robot, salon, sonar, alertes)
 
@@ -78,15 +83,51 @@ async def lifespan(_app: FastAPI):
             await sonar_task
 
 
-fastapi_app = FastAPI(title="Ping server", version="2.0.0", lifespan=lifespan)
+fastapi_app = FastAPI(
+    title="Ping server",
+    version="2.0.0",
+    lifespan=lifespan,
+    swagger_ui_parameters={
+        "docExpansion": "none",
+        "filter": True,
+        "defaultModelsExpandDepth": -1,
+        "deepLinking": True,
+    },
+)
 fastapi_app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 fastapi_app.include_router(http_router)
+fastapi_app.include_router(capteur_router)
 
 _appel = _modules_charges.get("app.services.appel_direct")
 if _appel is not None and getattr(_appel, "router", None) is not None:
     fastapi_app.include_router(_appel.router)
+
+
+
+def construire_openapi() -> dict:
+    if fastapi_app.openapi_schema:
+        return fastapi_app.openapi_schema
+    schema = get_openapi(
+        title=fastapi_app.title,
+        version=fastapi_app.version,
+        description=INTRODUCTION + PROTOCOLE,
+        routes=fastapi_app.routes,
+        tags=[{"name": nom, "description": desc} for nom, desc in THEMES + [TAG_WS] + TAGS_HTTP + [TAG_HTTP]],
+    )
+    composants = schema.setdefault("components", {}).setdefault("schemas", {})
+    for item in schema.get("paths", {}).values():
+        for operation in item.values():
+            operation.get("responses", {}).pop("422", None)
+    composants.pop("HTTPValidationError", None)
+    composants.pop("ValidationError", None)
+    schema["paths"] = {**operations(composants), **operation_ws(composants), **schema.get("paths", {})}
+    fastapi_app.openapi_schema = schema
+    return schema
+
+
+fastapi_app.openapi = construire_openapi
 
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path="socket.io")
 

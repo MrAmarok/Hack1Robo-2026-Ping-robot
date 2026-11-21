@@ -188,8 +188,7 @@ async def test_routes_http(serveur):
         r = await http.post(
             "/robot-drive", json={"code": code, "cmd": "s", "from": "test"}
         )
-        assert r.status_code == 200 and r.json()["recipients"] == 2
-        assert (await robot.attendre("robot_drive"))["by"] == "test"
+        assert r.status_code == 200 and r.json()["relaye"] is False and r.json()["ok"] is False
         assert (
             await http.post("/robot-drive", json={"code": code, "cmd": "??"})
         ).status_code == 400
@@ -215,6 +214,7 @@ async def test_routes_http(serveur):
         r = await http.get("/rtc/robot-x/whep")
         assert r.status_code == 502
         assert "ping://" in (await http.get("/ouvrir", params={"code": code})).text
+    assert not robot.a_recu("robot_drive")
     for c in (pilote, robot):
         await c.fermer()
 

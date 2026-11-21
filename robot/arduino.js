@@ -5,13 +5,17 @@
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 
+const NB = '\\s*-?\\d+(?:\\.\\d+)?\\s*';
+const RE_LIGNE_CAPTEUR = new RegExp(`^${NB},${NB},${NB},${NB},\\s*(?:\\d+(?:\\.\\d+)?)?\\s*$`);
+
 class Arduino {
-  constructor({ port, baud, log, onSensor, onPresence, onConnect }) {
+  constructor({ port, baud, log, onSensor, onPresence, onConnect, onLigneCapteur }) {
     this.port = port;
     this.baud = baud;
     this.log = log || console.log;
     this.onSensor = onSensor || (() => {});
     this.onPresence = onPresence || (() => {});
+    this.onLigneCapteur = onLigneCapteur || null;
     // Appele une fois la liaison serie ouverte : c'est le moment d'imposer
     // au firmware les reglages qu'on ne veut pas dependre de son demarrage.
     this.onConnect = onConnect || null;
@@ -51,6 +55,8 @@ class Arduino {
       } else if (line.startsWith('PRES:')) {
         // Le radar n'envoie que ses CHANGEMENTS d'etat.
         this.onPresence(line.slice(5).trim() === '1');
+      } else if (this.onLigneCapteur && RE_LIGNE_CAPTEUR.test(line)) {
+        this.onLigneCapteur(line);
       } else if (line) {
         this.log(`Arduino > ${line}`);
       }
