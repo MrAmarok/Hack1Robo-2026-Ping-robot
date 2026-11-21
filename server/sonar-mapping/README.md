@@ -51,6 +51,14 @@ The replay adds 12 readings per frame with a one-second pause between frames. Th
 
 Add `--format svg` to replay with SVG snapshots. An external mapper can also publish either format by atomically replacing the configured JSON file. Include `image` with `format` set to `svg` or `png` and `data` set to raw SVG markup or base64 PNG bytes. Include `readingCount`, `totalReadings`, `resolutionM`, and `updatedAt` in Unix milliseconds. Use SVGs with a `viewBox` and inline shapes.
 
+## Simulated robot
+
+[simuler_robot.py](simuler_robot.py) acts as the robot without hardware. It joins the pairing room over Socket.IO and streams sonar readings to `/ws/capteur` while it drives through a furnished 5 m × 4 m virtual room. The pilot can also drive it from the app. Usage and options are in the [server README](../README.md#tester-sans-robot--le-simulateur).
+
+```sh
+uv run --project server python server/sonar-mapping/simuler_robot.py --url http://localhost:3000 --code sonar-demo --accel 5
+```
+
 ## Sample data
 
 - [bench-wall.csv](samples/bench-wall.csv) uses the eight mean HC-SR04 distances published by the [Barkhausen Institut](https://www.barkhauseninstitut.org/research/lab-1/our-blog/distance-sensor-research). The source reports perpendicular measurements against a flat target. The CSV reconstructs the sensor positions from the reference distances by putting that target at X = 0 and the sensor on the negative X axis. This is a range replay along one line.

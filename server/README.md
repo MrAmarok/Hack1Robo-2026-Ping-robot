@@ -154,6 +154,71 @@ column. The server keeps the CSV and the generated map in
 echoes from 2 to 400 cm contribute to the map. Mapping a room while the robot moves
 requires the actual position and heading for each echo.
 
+### Tester sans robot : le simulateur
+
+`sonar-mapping/simuler_robot.py` joue le rôle du robot. Il se connecte au serveur comme `robot.js` et envoie des
+mesures sonar :
+
+- **WebSocket `/ws/capteur`** : les lignes partent par lots toutes les 200 ms. Le simulateur garde chaque ligne
+  jusqu'à l'accusé du serveur ; après une coupure, il se reconnecte et renvoie les lignes non accusées, dans la même
+  session.
+- **Socket.IO** : `pair {robot: true}` dans le salon `--code`. L'app voit le robot en ligne et peut le conduire
+  (`drive` et `robot_drive` : `F B L R S`, `V<n>`, `+`, `-`, `M<g>,<d>`).
+
+Le robot roule dans une pièce virtuelle de 5 m × 4 m meublée d'un canapé, d'une table et d'un carton. Chaque
+distance est calculée jusqu'au premier obstacle, avec le comportement d'un HC-SR04 : quelques cm d'erreur, pas
+d'écho au-delà de 4 m, échos souvent perdus sur un mur pris trop en biais.
+
+```sh
+cd server
+uv run python sonar-mapping/simuler_robot.py --code 1234             # tour de la piece (~1 min 30), puis s'arrete
+uv run python sonar-mapping/simuler_robot.py --code 1234 --accel 5   # meme tour, 5 fois plus vite
+uv run python sonar-mapping/simuler_robot.py --code 1234 --pilote    # attend les ordres de l'app (Ctrl+C pour finir)
+uv run python sonar-mapping/simuler_robot.py --code 1234 --csv sonar-mapping/samples/simulated-room.csv
+```
+
+Depuis la racine du dépôt : `uv run --project server python server/sonar-mapping/simuler_robot.py …`.
+
+| Option | Défaut | Rôle |
+| --- | --- | --- |
+| `--url` | `$SERVER_URL` ou `http://localhost:8000` | adresse du serveur ; `http://localhost:3000` avec `uv run ping-server` |
+| `--code` | `$CODE` ou `1234` | code du salon |
+| `--session` | `sim-AAAAMMJJ-hhmmss` | fichier `capteur/<code>/<session>.csv` côté serveur |
+| `--cle` | `$ROBOT_KEY` | à passer si `ROBOT_KEY` est configurée sur le serveur |
+| `--pilote` | non | le robot attend les ordres de l'app au lieu de faire le tour |
+| `--boucle` | non | recommence le tour (ou le CSV) sans fin |
+| `--accel` | `1` | accélère le temps simulé du tour |
+| `--csv` | — | rejoue ce fichier CSV ligne par ligne au lieu de simuler |
+| `--frequence` | `10` | lignes par seconde avec `--csv` |
+| `--sans-bruit` | non | mesures parfaites, sans bruit ni écho perdu |
+| `--sans-socketio` | non | n'ouvre que le WebSocket capteur ; le robot n'apparaît pas dans l'app |
+| `--graine` | aléatoire | mêmes mesures d'une exécution à l'autre |
+
+En mode tour, le robot passe en pilotage manuel dès que le pilote touche au joystick. Sans ordre depuis 1 s, il
+s'arrête, comme si le bouton avait été relâché.
+
+Socket.IO passe par le client du groupe dev (`uv sync` l'installe). S'il manque, le simulateur n'ouvre que le
+WebSocket capteur.
+
+**Voir la carte**
+
+- **Dans l'app.** Lancer Expo sur le serveur local (`EXPO_PUBLIC_PING_SERVER_ORIGIN=http://localhost:8000 npm start`,
+  puis `w`), s'appairer avec le même code, ouvrir la caméra en plein écran (⛶), puis **Indoor map** →
+  **Start scan**. Lancer le simulateur, puis **Save scan** quand il a fini. Seules les lignes reçues après
+  **Start scan** entrent dans le scan. Sur un téléphone, le serveur doit écouter sur le réseau (`--host 0.0.0.0`) et
+  la variable doit contenir l'IP du PC.
+- **En image.** À la fin, le simulateur affiche les deux commandes à lancer depuis `server/` :
+
+  ```sh
+  curl -o session.csv "http://localhost:8000/capteur/<session>?code=1234"
+  uv run --locked --script sonar-mapping/map_sonar.py session.csv carte.png
+  ```
+
+  L'image compte un pixel par case de 5 cm : il faut zoomer pour la lire.
+
+Le simulateur sort en code 1 si le serveur refuse la connexion (code manquant, clé invalide…) ou si aucune ligne
+n'a été acceptée.
+
 ## Documentation (Swagger)
 
 Serveur lancé, ouvrir **`/docs`** (Swagger) ou `/redoc` ; la spécification brute est sur `/openapi.json`.
