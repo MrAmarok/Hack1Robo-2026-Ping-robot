@@ -31,7 +31,7 @@ On NixOS, prefix the `uv` commands with `UV_PYTHON="$(command -v python3)"` to u
 
    For a phone on the same network, substitute the server computer's LAN address for `localhost`. The phone build must allow an HTTP connection to the development server. With the deployed Ping server, leave the Expo override unset and configure the snapshot file and room on that server.
 
-3. Enter a nickname and the shared code `sonar-demo`, then click **S’APPARIER**. Once connected to the robot, expand **Camera** with **⛶** and tap **Live sonar map** in the guidance toolbar.
+3. Enter a nickname and the shared code `sonar-demo`, then click **S’APPARIER**. Once connected to the robot, expand **Camera** with **⛶** and tap **Indoor map** in the guidance toolbar.
 
    To try the replay without hardware, run this in another terminal from the repository root and leave it running while you pair.
 
@@ -50,6 +50,22 @@ On NixOS, prefix the `uv` commands with `UV_PYTHON="$(command -v python3)"` to u
 The replay adds 12 readings per frame with a one-second pause between frames. The map keeps the same extent throughout and stays visible when the replay ends. Use a CSV recorded at known poses to replay actual measurements.
 
 Add `--format svg` to replay with SVG snapshots. An external mapper can also publish either format by atomically replacing the configured JSON file. Include `image` with `format` set to `svg` or `png` and `data` set to raw SVG markup or base64 PNG bytes. Include `readingCount`, `totalReadings`, `resolutionM`, and `updatedAt` in Unix milliseconds. Use SVGs with a `viewBox` and inline shapes.
+
+## Simulated robot
+
+[simuler_robot.py](simuler_robot.py) acts as the robot without hardware. It joins the pairing room over Socket.IO and streams sonar readings to `/ws/capteur` while it drives through a furnished 5 m × 4 m virtual room. The pilot can also drive it from the app. Usage and options are in the [server README](../README.md#tester-sans-robot--le-simulateur).
+
+```sh
+uv run --project server python server/sonar-mapping/simuler_robot.py --url http://localhost:3000 --code sonar-demo --accel 5
+```
+
+Add `--scan` to have the simulator start and save a scan itself, the way **Start scan** and **Save scan** do in the app. It pairs a second socket as the pilot, so the app must not already be the pilot of that room. The server builds the map with `sonar_mapper`, and the simulator writes the PNG to `.simulation.ignore/carte-<scan>.png`.
+
+[simuler_drift.py](simuler_drift.py) runs offline. It drives the same tour with a fixed forward sensor and adds drift to the reported pose (odometry heading bias, scale error, wheel slip, direct x/y drift) or to the distances (bias or scale growing over time, random walk). It maps each example with `sonar_mapper.build_map` and scores the map against the true room. Results, including `donnees.csv` to replay against the server with `simuler_robot.py --csv … --scan`, go to `.simulation.ignore/drift/`. Git ignores `.simulation.ignore/`.
+
+```sh
+uv run --project server python server/sonar-mapping/simuler_drift.py
+```
 
 ## Sample data
 

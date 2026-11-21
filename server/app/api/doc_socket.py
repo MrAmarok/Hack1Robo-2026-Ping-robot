@@ -106,6 +106,33 @@ RobotRondeStatusEmis = create_model(
 )
 
 
+SonarScanSession = modele("SonarScanSession", session=(str, "Scan session ID."))
+SonarScanStatus = modele(
+    "SonarScanStatus",
+    session=(Optional[str], "Active scan session ID.", OPT),
+    saving=(Optional[bool], "Whether map generation is running.", OPT),
+    recordingError=(Optional[str], "Reason recording stopped early.", OPT),
+    error=(Optional[str], "Reason the request failed.", OPT),
+)
+SonarScanResult = modele(
+    "SonarScanResult",
+    session=(Optional[str], "Saved scan session ID.", OPT),
+    snapshot=(Optional[dict], "Occupancy map in the sonar_map_snapshot format.", OPT),
+    mapError=(Optional[str], "Reason the saved scan could not produce a map.", OPT),
+    error=(Optional[str], "Reason the request failed.", OPT),
+)
+SonarScanEntry = modele(
+    "SonarScanEntry",
+    session=(str, "Saved scan session ID."),
+    savedAt=(int, "Save time in Unix milliseconds."),
+)
+SonarScanHistory = modele(
+    "SonarScanHistory",
+    scans=(Optional[list[SonarScanEntry]], "Saved scans, newest first.", OPT),
+    error=(Optional[str], "Reason the request failed.", OPT),
+)
+
+
 @dataclass
 class Evenement:
     nom: str
@@ -720,6 +747,37 @@ EVENEMENTS: list[Evenement] = [
               recu_par=A_SALON),
     Evenement("rt_veille", T_RT, "État de veille", "", recu=EtatVeille, recu_par=A_SALON),
 
+    Evenement(
+        "sonar_scan_status", T_SONAR, "Get scan status",
+        "Returns the active session ID, whether it is saving, and any recording error.",
+        emis=Vide, emis_par=A_APP,
+        ack=SonarScanStatus, ack_description="Recording status or an error.",
+    ),
+    Evenement(
+        "sonar_scan_start", T_SONAR, "Start a scan",
+        "Records incoming sonar rows in the pilot's pairing room. Returns the existing scan if one is active.",
+        emis=Vide, emis_par=A_PILOTE, pilote=True,
+        ack=SonarScanStatus, ack_description="Recording status or an error.",
+    ),
+    Evenement(
+        "sonar_scan_save", T_SONAR, "Save a scan",
+        "Stops recording and builds the occupancy map from the session CSV.",
+        emis=SonarScanSession,
+        emis_par=A_PILOTE, pilote=True,
+        ack=SonarScanResult, ack_description="Saved scan and occupancy map, or an error.",
+    ),
+    Evenement(
+        "sonar_scan_list", T_SONAR, "List saved scans",
+        "Lists saved scans in the pilot or admitted spectator's pairing room, newest first.",
+        emis=Vide, emis_par=A_APP,
+        ack=SonarScanHistory, ack_description="Saved scans or an error.",
+    ),
+    Evenement(
+        "sonar_scan_open", T_SONAR, "Open a saved scan",
+        "Returns the saved map for a scan in the pilot or admitted spectator's pairing room.",
+        emis=SonarScanSession, emis_par=A_APP,
+        ack=SonarScanResult, ack_description="Saved scan and occupancy map, or an error.",
+    ),
     Evenement(
         "sonar_map_request", T_SONAR, "Demander la dernière carte sonar",
         "Seulement dans le salon `SONAR_MAP_ROOM` configuré sur le serveur, pour le pilote ou un spectateur "

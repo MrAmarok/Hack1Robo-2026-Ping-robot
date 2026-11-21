@@ -83,8 +83,13 @@ def compter(code: str, session: str) -> int:
 
 
 def ajouter(code: str, session: str, lignes: list[str]) -> int:
-    f = chemin(code, session)
     total = compter(code, session)
+    ajouter_csv(chemin(code, session), lignes)
+    _comptes[(code, session)] = total + len(lignes)
+    return _comptes[(code, session)]
+
+
+def ajouter_csv(f: Path, lignes: list[str]) -> None:
     if f.exists() and f.stat().st_size > config.CAPTEUR_MAX_MO * 1024 * 1024:
         raise TropVolumineux(f"session au-dela de {config.CAPTEUR_MAX_MO} Mo")
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -93,8 +98,6 @@ def ajouter(code: str, session: str, lignes: list[str]) -> int:
         if nouveau:
             sortie.write(ENTETE + "\n")
         sortie.write("".join(l + "\n" for l in lignes))
-    _comptes[(code, session)] = total + len(lignes)
-    return _comptes[(code, session)]
 
 
 def lister(code: str) -> list[dict]:

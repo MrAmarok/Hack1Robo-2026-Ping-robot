@@ -2,6 +2,7 @@
   "name": "ping-robot",
   "version": "1.0.0",
   "private": true,
+  "license": "CC-BY-NC-SA-4.0",
   "description": "Client robot (Raspberry Pi 3) pour l'app Ping : appairage, GPS et Se rejoindre",
   "main": "robot.js",
   "scripts": {

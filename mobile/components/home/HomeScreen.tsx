@@ -45,7 +45,6 @@ export default function HomeScreen() {
   const [pairCode, setPairCode] = useState('');
   const [customMessage, setCustomMessage] = useState('');
   const [socketOnline, setSocketOnline] = useState(false);
-  const [sonarOpen, setSonarOpen] = useState(false);
   const [sonarSnapshot, setSonarSnapshot] = useState<SonarSnapshot | null>(null);
   const [pairedWith, setPairedWith] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -585,6 +584,7 @@ export default function HomeScreen() {
     pendingRobotCmdRef,
     setRobotCommandStatus,
     isLandscape,
+    camFullscreen,
     setCameraOn,
     setCamFullscreen,
     robotStatus,
@@ -924,6 +924,10 @@ export default function HomeScreen() {
   // Un simple "stop" moteur n'en coupe qu'une : les boucles du serveur
   // reenvoient un ordre 400 ms plus tard et le robot repart. D'ou robot_stop_all.
   const arretUrgence = () => {
+    if (robotHoldTimerRef.current) {
+      clearInterval(robotHoldTimerRef.current);
+      robotHoldTimerRef.current = null;
+    }
     const code = pairCodeRef.current?.trim();
     if (!code) return;
     const s = socketRef.current;
@@ -1101,8 +1105,10 @@ export default function HomeScreen() {
 
       <CameraModal
         camFullscreen={camFullscreen}
-        sonarOpen={sonarOpen}
-        setSonarOpen={setSonarOpen}
+        isLandscape={isLandscape}
+        cameraOn={cameraOn}
+        gps={{ maps, robotCoord, robotRegion, myCoord, destination, routeCoords }}
+        stopHeldDrive={() => { if (robotHoldTimerRef.current) stopRobotDriveHold(); }}
         setCamFullscreen={setCamFullscreen}
         socketOnline={socketOnline}
         sonarSnapshot={sonarSnapshot}

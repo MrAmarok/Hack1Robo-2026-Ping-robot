@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { PendingRobotCommand, RobotDriveCommand, RobotStatus } from './types';
 import { Alert } from 'react-native';
 import { ROBOT_DRIVE_LABELS, ROBOT_CAM_BUZZ_PREFIX, CAM_STEP_DEG } from './presets';
@@ -14,6 +14,7 @@ type DriveControlsOptions = {
   pendingRobotCmdRef: React.RefObject<PendingRobotCommand | null>;
   setRobotCommandStatus: React.Dispatch<React.SetStateAction<string>>;
   isLandscape: boolean;
+  camFullscreen: boolean;
   setCameraOn: React.Dispatch<React.SetStateAction<boolean>>;
   setCamFullscreen: React.Dispatch<React.SetStateAction<boolean>>;
   robotStatus: RobotStatus | null;
@@ -32,6 +33,7 @@ export function useDriveControls({
   pendingRobotCmdRef,
   setRobotCommandStatus,
   isLandscape,
+  camFullscreen,
   setCameraOn,
   setCamFullscreen,
   robotStatus,
@@ -49,7 +51,7 @@ export function useDriveControls({
   const stopGeneration = useRef(0);
   const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const sendRobotDrive = (cmd: string, label: string, track: boolean) => {
+  const sendRobotDrive = useCallback((cmd: string, label: string, track: boolean) => {
     const code = pairCodeRef.current?.trim();
     const socket = socketRef.current;
     if (!code || !pairedWith || !socket?.connected) {
@@ -75,7 +77,7 @@ export function useDriveControls({
         setRobotCommandStatus(`${label} : pas de retour robot`);
       }
     }, 2500);
-  };
+  }, [pairCodeRef, pairedWith, pendingRobotCmdRef, pushRobotLog, setRobotCommandStatus, socketRef]);
 
   const sendRobotSpeed = (pct: number) => {
     const p = Math.max(0, Math.min(100, Math.round(pct)));
@@ -137,12 +139,12 @@ export function useDriveControls({
     camHoldTimerRef.current = setInterval(() => stepCam(dPan, dTilt), 140);
   };
 
-  const stopCamHold = () => {
+  const stopCamHold = useCallback(() => {
     if (camHoldTimerRef.current) {
       clearInterval(camHoldTimerRef.current);
       camHoldTimerRef.current = null;
     }
-  };
+  }, []);
 
   const centerCam = () => {
     stopCamHold();
@@ -159,24 +161,6 @@ export function useDriveControls({
     emitCamMove({ view: next });
   };
 
-  // Tourne le tel a l'horizontale -> plein ecran (allume la camera si besoin).
-  // Retour en portrait -> ferme. On ne reagit qu'au CHANGEMENT d'axe pour ne pas
-  // rouvrir apres une fermeture manuelle (✕) restee en paysage. La vue caméra ne
-  // change pas : c'est la camera normale (bouton AV/AR pour basculer).
-  // NB: necessite un build avec app.json orientation="default".
-  const prevLandscapeRef = useRef(false);
-  useEffect(() => {
-    if (isLandscape === prevLandscapeRef.current) return;
-    prevLandscapeRef.current = isLandscape;
-    if (!pairedWith) return;
-    if (isLandscape) {
-      setCameraOn(true);
-      setCamFullscreen(true);
-    } else {
-      setCamFullscreen(false);
-    }
-  }, [isLandscape, pairedWith, setCamFullscreen, setCameraOn]);
-
   // Nettoyage si l'ecran se demonte pendant un maintien de fleche camera.
   useEffect(
     () => () => {
@@ -185,13 +169,13 @@ export function useDriveControls({
     []
   );
 
-  const cancelRobotDriveHold = () => {
+  const cancelRobotDriveHold = useCallback(() => {
     stopGeneration.current += 1;
     if (robotHoldTimerRef.current !== null) {
       clearInterval(robotHoldTimerRef.current);
       robotHoldTimerRef.current = null;
     }
-  };
+  }, [robotHoldTimerRef]);
 
   useEffect(() => () => {
     if (replyTimerRef.current !== null) clearTimeout(replyTimerRef.current);
@@ -235,7 +219,7 @@ export function useDriveControls({
     }, 650);
   };
 
-  const stopRobotDriveHold = () => {
+  const stopRobotDriveHold = useCallback(() => {
     cancelRobotDriveHold();
     const socket = socketRef.current;
     const socketId = socket?.id;
@@ -251,7 +235,29 @@ export function useDriveControls({
         sendRobotDrive('S', label, false);
       }, delay);
     }
-  };
+  }, [cancelRobotDriveHold, pairCodeRef, sendRobotDrive, socketRef]);
+
+  // Keep the pilot open when switching back to portrait.
+  const prevLandscapeRef = useRef(false);
+  useEffect(() => {
+    if (isLandscape === prevLandscapeRef.current) return;
+    prevLandscapeRef.current = isLandscape;
+    if (robotHoldTimerRef.current) stopRobotDriveHold();
+    stopCamHold();
+    if (isLandscape && pairedWith && !camFullscreen) {
+      setCameraOn(true);
+      setCamFullscreen(true);
+    }
+  }, [
+    camFullscreen,
+    isLandscape,
+    pairedWith,
+    robotHoldTimerRef,
+    setCamFullscreen,
+    setCameraOn,
+    stopCamHold,
+    stopRobotDriveHold,
+  ]);
 
   return {
     sendRobotSpeed,

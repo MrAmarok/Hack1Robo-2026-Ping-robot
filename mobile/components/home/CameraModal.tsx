@@ -1,17 +1,23 @@
-import { Modal, View, Image, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { Modal, View, Image, Text, TouchableOpacity, ScrollView, Pressable } from 'react-native';
 import { SonarMapView, type SonarSnapshot } from '@/components/SonarMapView';
 import { styles, HUD } from './styles';
 import { webrtc } from './config';
-import { RobotLinkBadge, SpeedSlider, CamPanTiltPad } from './controls';
+import { RobotLinkBadge, SpeedSlider } from './controls';
 import { rangerVideoDansGalerie } from './gallery';
 import type { RobotDriveCommand, VideoServeur, AlerteHisto } from './types';
-import React from 'react';
+import { useEffect, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { PilotButton } from './PilotButton';
+import { PilotGpsMap, type PilotGpsMapProps } from './PilotGpsMap';
+import { pilotStyles as pilot } from './pilotStyles';
 import { Socket } from 'socket.io-client';
 
 type CameraModalProps = {
   camFullscreen: boolean;
-  sonarOpen: boolean;
-  setSonarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  isLandscape: boolean;
+  cameraOn: boolean;
+  gps: PilotGpsMapProps;
+  stopHeldDrive: () => void;
   setCamFullscreen: React.Dispatch<React.SetStateAction<boolean>>;
   socketOnline: boolean;
   sonarSnapshot: SonarSnapshot | null;
@@ -54,6 +60,7 @@ type CameraModalProps = {
   ecartCap: number | null;
   capActuel: number | null;
   robotLink: "connecting" | "connected" | "disconnected";
+  robotCommandStatus: string;
   speedPct: number;
   setSpeedPct: React.Dispatch<React.SetStateAction<number>>;
   sendRobotSpeed: (pct: number) => void;
@@ -66,7 +73,6 @@ type CameraModalProps = {
   rtPhrase: string;
   estPilote: boolean;
   role: "pilote" | "spectateur" | "attente" | null;
-  robotCommandStatus: string;
   startRobotDriveHold: (cmd: RobotDriveCommand) => void;
   stopRobotDriveHold: () => void;
   videosChargement: boolean;
@@ -79,8 +85,10 @@ type CameraModalProps = {
 
 export function CameraModal({
   camFullscreen,
-  sonarOpen,
-  setSonarOpen,
+  isLandscape,
+  cameraOn,
+  gps,
+  stopHeldDrive,
   setCamFullscreen,
   socketOnline,
   sonarSnapshot,
@@ -123,6 +131,7 @@ export function CameraModal({
   ecartCap,
   capActuel,
   robotLink,
+  robotCommandStatus,
   speedPct,
   setSpeedPct,
   sendRobotSpeed,
@@ -135,7 +144,6 @@ export function CameraModal({
   rtPhrase,
   estPilote,
   role,
-  robotCommandStatus,
   startRobotDriveHold,
   stopRobotDriveHold,
   videosChargement,
@@ -145,340 +153,299 @@ export function CameraModal({
   setAlertePhoto,
   alerteGrande,
 }: CameraModalProps) {
-  return (
-    <>
-      {/* === Camera plein ecran + commandes de pilotage === */}
-      <Modal
-        visible={camFullscreen || sonarOpen}
-        animationType="fade"
-        statusBarTranslucent
-        supportedOrientations={['portrait', 'landscape']}
-        onRequestClose={() => {
-          if (sonarOpen) setSonarOpen(false);
-          else setCamFullscreen(false);
+  const [dialog, setDialog] = useState<'options' | 'map' | null>(null);
+  const [option, setOption] = useState<'camera' | 'audio' | 'alerts'>('camera');
+  const [mapTab, setMapTab] = useState<'gps' | 'sonar'>('gps');
+
+  useEffect(() => {
+    if (!camFullscreen) setDialog(null);
+  }, [camFullscreen]);
+
+  const closeDialog = () => {
+    stopCamHold();
+    setDialog(null);
+  };
+
+  const closePilot = () => {
+    stopHeldDrive();
+    closeDialog();
+    setCamFullscreen(false);
+  };
+
+  const closeLayer = () => {
+    if (alertePhoto && alerteGrande) setAlerteGrande(false);
+    else if (videosOuvert) setVideosOuvert(false);
+    else if (histoOuvert) setHistoOuvert(false);
+    else if (dialog) closeDialog();
+    else closePilot();
+  };
+
+  const openOptions = () => {
+    stopHeldDrive();
+    setOption('camera');
+    setDialog('options');
+  };
+
+  const openMap = (tab: 'gps' | 'sonar') => {
+    stopHeldDrive();
+    setMapTab(tab);
+    setDialog('map');
+    if (tab === 'sonar') socketRef.current?.emit('sonar_map_request');
+  };
+
+  const toggleListening = () => setListening((value) => !value);
+  const handleTalk = webrtc ? (talking ? stopTalkLive : startTalkLive) : toggleTalk;
+  const emergency = <PilotButton label="Arrêt d’urgence" onPress={arretUrgence} emergency />;
+  const options = <PilotButton label="Options" onPress={openOptions} />;
+  const map = <PilotButton label="Carte" onPress={() => openMap('gps')} />;
+  const speed = (
+    <View style={pilot.speed}>
+      <Text style={pilot.speedLabel}>Vitesse</Text>
+      <SpeedSlider
+        pct={speedPct}
+        onPreview={setSpeedPct}
+        onCommit={(value) => {
+          setSpeedPct(value);
+          sendRobotSpeed(value);
         }}
-      >
-        {sonarOpen && (
-          <SonarMapView
-            connected={socketOnline}
-            snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
-            onClose={() => setSonarOpen(false)}
-          />
-        )}
-        <View style={[styles.fsRoot, sonarOpen && styles.fsHidden]} {...pinchResponder.panHandlers}>
-          {rtcStreamUrl && webrtc ? (
-            // contain = on voit TOUTE l'image (plus de rognage) ; le zoom
-            // eventuel est applique par-dessus (boutons +/- ou pincement).
-            <webrtc.RTCView
-              streamURL={rtcStreamUrl}
-              style={[styles.fsImage, { transform: [{ scale: camZoom }] }]}
-              objectFit="contain"
-            />
-          ) : frameUri ? (
-            <Image
-              source={{ uri: frameUri }}
-              style={[styles.fsImage, { transform: [{ scale: camZoom }] }]}
-              resizeMode="contain"
-              fadeDuration={0}
-            />
-          ) : (
-            <View style={styles.fsWait}>
-              <Text style={{ color: '#7C9C93' }}>Connexion a la camera du robot…</Text>
-            </View>
-          )}
+      />
+      <Text style={[pilot.speedLabel, pilot.speedValue]}>{speedPct}%</Text>
+    </View>
+  );
 
-          {/* Barre du haut : fermer / audio / temoin robot / vitesse */}
-          <View style={styles.fsTopRow}>
-            <View style={styles.fsSpeedGroup}>
-              <TouchableOpacity
-                style={styles.camPadSpeedBtn}
-                onPress={() => setCamFullscreen(false)}
-              >
-                <Text style={styles.camPadSymbol}>✕</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityRole="button"
-                style={[styles.camPadSpeedBtn, styles.fsSonarBtn]}
-                onPress={() => {
-                  setSonarOpen(true);
-                  socketRef.current?.emit('sonar_map_request');
-                }}
-              >
-                <Text style={styles.fsSonarLabel}>Live sonar map</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, listening && styles.fsAudioOn]}
-                onPress={() => setListening((v) => !v)}
-              >
-                <Text style={styles.camPadSymbol}>{listening ? '🔊' : '🔈'}</Text>
-              </TouchableOpacity>
-              {/* Parler au robot sans dire le mot-cle */}
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, askingVoice && styles.fsAudioOn]}
-                onPress={askRobotVoice}
-              >
-                <Text style={styles.camPadSymbol}>🎤</Text>
-              </TouchableOpacity>
-              {/* Les trois actions qu'on veut sous la main sans quitter la vue.
-                Elles vivaient tout en bas de la page principale. */}
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, talking && styles.fsAudioOn]}
-                onPress={webrtc ? (talking ? stopTalkLive : startTalkLive) : toggleTalk}
-              >
-                <Text style={styles.camPadSymbol}>🎙️</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, rtActif && styles.fsAudioOn]}
-                onPress={() => basculerRt(!rtActif)}
-              >
-                <Text style={styles.camPadSymbol}>💬</Text>
-              </TouchableOpacity>
-              {/* Enregistrement cote serveur : il recopie le flux deja
-                diffuse, donc la vue reste affichee. Le film HD, lui,
-                monopoliserait la camera et eteindrait cet ecran. */}
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, recActif && styles.fsAudioOn]}
-                onPress={() => basculerRec(!recActif)}
-              >
-                <Text style={styles.camPadSymbol}>{recActif ? '⏹' : '⏺'}</Text>
-              </TouchableOpacity>
-              {/* Zoom image : - / + (ou pincement a deux doigts sur l'image) */}
-              <TouchableOpacity style={styles.camPadSpeedBtn} onPress={() => bumpZoom(-0.25)}>
-                <Text style={styles.camPadSymbol}>−</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.camPadSpeedBtn}
-                onPress={() => bumpZoom(0.25)}
-                onLongPress={() => setCamZoom(1)}
-              >
-                <Text style={styles.camPadSymbol}>+</Text>
-              </TouchableOpacity>
-              {/* Enregistrements conservees sur le serveur. */}
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, videosOuvert && styles.fsAudioOn]}
-                onPress={() => { setVideosOuvert(true); chargerVideos(); }}
-              >
-                <Text style={styles.camPadSymbol}>🎞</Text>
-              </TouchableOpacity>
+  const driveButton = (cmd: RobotDriveCommand, label: string, accessibilityLabel: string) => (
+    <PilotButton
+      label={label}
+      accessibilityLabel={accessibilityLabel}
+      symbol
+      onPressIn={() => startRobotDriveHold(cmd)}
+      onPressOut={stopRobotDriveHold}
+    />
+  );
+  const drive = estPilote && (
+    <View style={pilot.controls} pointerEvents="box-none">
+      <View style={pilot.group}>
+        {driveButton('L', '◀', 'Tourner à gauche')}
+        {driveButton('R', '▶', 'Tourner à droite')}
+      </View>
+      <View style={pilot.group}>
+        <PilotButton label="■" accessibilityLabel="Stop moteurs" symbol onPress={stopRobotDriveHold} />
+        {isLandscape && options}
+      </View>
+      <View style={pilot.group}>
+        {driveButton('F', '▲', 'Avancer')}
+        {driveButton('B', '▼', 'Reculer')}
+      </View>
+    </View>
+  );
+  const error = robotLink === 'disconnected'
+    ? 'Robot hors ligne'
+    : !cameraOn
+      ? 'Caméra coupée'
+      : 'Connexion au flux…';
+  const archiveOpen = videosOuvert || histoOuvert || (!!alertePhoto && alerteGrande);
+  const layerOpen = !!dialog || archiveOpen;
 
-              {/* Historique : ce qui a sonne ET ce qui a ete retenu. */}
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, histoOuvert && styles.fsAudioOn]}
-                onPress={() => { setHistoOuvert(true); chargerHistorique(); }}
-              >
-                <Text style={styles.camPadSymbol}>📋</Text>
-              </TouchableOpacity>
-
-              {/* Revoir la photo de la derniere alerte. */}
-              {!!alertePhoto && (
-                <TouchableOpacity
-                  style={styles.camPadSpeedBtn}
-                  onPress={() => setAlerteGrande(true)}
-                >
-                  <Text style={styles.camPadSymbol}>🖼</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Photo : descendu de l'accueil. Un robot de surveillance sert
-                d'abord a rapporter une image. */}
-              <TouchableOpacity
-                style={styles.camPadSpeedBtn}
-                onPress={savePhoto}
-                disabled={savingPhoto}
-              >
-                <Text style={styles.camPadSymbol}>{savingPhoto ? '⏳' : '📷'}</Text>
-              </TouchableOpacity>
-
-              {/* Alarme : appui LONG pour declencher, simple pour couper.
-                Meme regle qu'a l'accueil — plus facile d'eteindre que
-                d'allumer. */}
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, alarmeOn && styles.fsAlarmeOn]}
-                onPress={() => { if (alarmeOn) basculerAlarme(false); }}
-                onLongPress={() => { if (!alarmeOn) basculerAlarme(true); }}
-                delayLongPress={700}
-              >
-                <Text style={styles.camPadSymbol}>🚨</Text>
-              </TouchableOpacity>
-
-              {/* Arret d'urgence : il a quitte l'accueil avec le reste du
-                pilotage, mais il ne doit JAMAIS devenir introuvable — c'est
-                ici qu'on conduit, c'est donc ici qu'il doit etre. */}
-              <TouchableOpacity style={[styles.camPadSpeedBtn, styles.fsStopAll]} onPress={arretUrgence}>
-                <Text style={styles.camPadSymbol}>⛔</Text>
-              </TouchableOpacity>
-
-              {/* Haut-parleur / ecouteur. Le son fort passe par le flux MP3,
-                le mode discret par WebRTC (plus reactif, mais iOS le sort
-                dans l'ecouteur d'oreille). */}
-              <TouchableOpacity
-                style={[styles.camPadSpeedBtn, hautParleur && styles.fsAudioOn]}
-                onPress={() => setHautParleur((v) => !v)}
-              >
-                <Text style={styles.camPadSymbol}>{hautParleur ? '📢' : '📞'}</Text>
-              </TouchableOpacity>
-
-              {/* Couper la camera : le bouton REGARDER a disparu de l'accueil
-                (la camera s'y allume seule), il faut donc garder un moyen
-                d'arreter le flux — sinon la 4G tourne en permanence. */}
-              <TouchableOpacity
-                style={styles.camPadSpeedBtn}
-                onPress={() => {
-                  setCameraOn(false);
-                  setCamFullscreen(false);
-                }}
-              >
-                <Text style={styles.camPadSymbol}>⏻</Text>
-              </TouchableOpacity>
-
-              {/* Trajectoire : version compacte de la boussole de la page
-                principale. C'est en plein ecran qu'on pilote vraiment, donc
-                c'est la qu'il faut voir si le robot part de travers. */}
-              <View
-                style={[
-                  styles.fsCap,
-                  ecartCap != null &&
-                  (Math.abs(ecartCap) <= 3
-                    ? styles.fsCapOk
-                    : Math.abs(ecartCap) <= 10
-                      ? styles.fsCapMoyen
-                      : styles.fsCapMauvais),
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.fsCapFleche,
-                    { transform: [{ rotate: `${ecartCap ?? 0}deg` }] },
-                    capActuel == null && styles.fsCapOff,
-                  ]}
-                >
-                  ▲
-                </Text>
-                <Text style={styles.fsCapTexte}>
-                  {capActuel == null
-                    ? 'cap ?'
-                    : ecartCap == null
-                      ? `${Math.round(capActuel)}°`
-                      : Math.abs(ecartCap) <= 3
-                        ? 'droit'
-                        : `${Math.abs(Math.round(ecartCap))}°${ecartCap > 0 ? 'D' : 'G'}`}
-                </Text>
+  return (
+    <Modal
+      visible={camFullscreen}
+      animationType="fade"
+      supportedOrientations={['portrait', 'landscape']}
+      onRequestClose={closeLayer}
+    >
+      <SafeAreaView style={pilot.root}>
+        <View style={pilot.stage}>
+          <View
+            style={pilot.stage}
+            accessibilityElementsHidden={layerOpen}
+            importantForAccessibility={layerOpen ? 'no-hide-descendants' : 'auto'}
+          >
+            {!isLandscape && (
+              <View style={pilot.top}>
+                <PilotButton label="‹" accessibilityLabel="Retour à l’accueil" onPress={closePilot} symbol />
+                <Text style={pilot.title}>Pilotage</Text>
+                <RobotLinkBadge status={robotLink} />
               </View>
-              {camZoom > 1 && (
-                <TouchableOpacity style={styles.camPadSpeedBtn} onPress={() => setCamZoom(1)}>
-                  <Text style={styles.fsZoomText}>{camZoom.toFixed(1)}x</Text>
-                </TouchableOpacity>
+            )}
+
+            <View style={[pilot.feed, isLandscape && pilot.landscapeFeed]} {...pinchResponder.panHandlers}>
+              {cameraOn && rtcStreamUrl && webrtc ? (
+                <webrtc.RTCView
+                  streamURL={rtcStreamUrl}
+                  style={[pilot.image, { transform: [{ scale: camZoom }] }]}
+                  objectFit="contain"
+                />
+              ) : cameraOn && frameUri ? (
+                <Image
+                  source={{ uri: frameUri }}
+                  style={[pilot.image, { transform: [{ scale: camZoom }] }]}
+                  resizeMode="contain"
+                  fadeDuration={0}
+                />
+              ) : (
+                <View style={pilot.feedMessage}>
+                  <Text style={pilot.title}>{error}</Text>
+                  {!cameraOn && <PilotButton label="Allumer la caméra" onPress={() => setCameraOn(true)} />}
+                </View>
               )}
             </View>
-            <RobotLinkBadge status={robotLink} />
-            <View style={styles.fsSpeedGroup}>
-              <SpeedSlider
-                compact
-                pct={speedPct}
-                onPreview={setSpeedPct}
-                onCommit={(p) => {
-                  setSpeedPct(p);
-                  sendRobotSpeed(p);
-                }}
-              />
-              <Text style={styles.speedPctTextLight}>{speedPct}%</Text>
+
+            {isLandscape && (
+              <>
+                <View style={pilot.top} pointerEvents="box-none">
+                  <PilotButton label="‹" accessibilityLabel="Retour à l’accueil" onPress={closePilot} symbol />
+                  <View style={pilot.status}><RobotLinkBadge status={robotLink} /></View>
+                  {emergency}
+                </View>
+                <View style={pilot.landscapeMap}>{map}</View>
+              </>
+            )}
+
+            <View style={isLandscape ? pilot.landscapeControls : pilot.portraitControls} pointerEvents="box-none">
+              {!isLandscape && (
+                <View style={pilot.groupFill}>
+                  <PilotButton label="Écouter" active={listening} onPress={toggleListening} style={pilot.fill} />
+                  <PilotButton label="Parler" active={talking} onPress={handleTalk} style={pilot.fill} />
+                  <PilotButton label="Carte" onPress={() => openMap('gps')} style={pilot.fill} />
+                  <PilotButton label="Options" onPress={openOptions} style={pilot.fill} />
+                </View>
+              )}
+              {(rtActif || !estPilote || capActuel != null || !!robotCommandStatus) && (
+                <View style={pilot.badgeRow} pointerEvents="none">
+                  {rtActif && <Text style={pilot.statusText}>{rtEveille ? 'Solana écoute' : `En veille · ${rtPhrase}`}</Text>}
+                  {!estPilote && <Text style={pilot.statusText}>{role === 'attente' ? 'Demande en attente' : 'Spectateur'}</Text>}
+                  {estPilote && !!robotCommandStatus && (
+                    <Text accessibilityLiveRegion="polite" numberOfLines={1} style={pilot.statusText}>
+                      {robotCommandStatus}
+                    </Text>
+                  )}
+                  {estPilote && capActuel != null && (
+                    <Text style={pilot.statusText}>
+                      {ecartCap == null
+                        ? `Cap ${Math.round(capActuel)}°`
+                        : Math.abs(ecartCap) <= 3 ? 'Trajectoire droite' : `${Math.abs(Math.round(ecartCap))}° ${ecartCap > 0 ? 'droite' : 'gauche'}`}
+                    </Text>
+                  )}
+                </View>
+              )}
+              {estPilote && speed}
+              {drive}
+              {isLandscape && !estPilote && <View style={pilot.group}>{options}</View>}
+              {!isLandscape && emergency}
             </View>
           </View>
 
-          {/* Pan-tilt : oriente la camera sans bouger le robot */}
-          <CamPanTiltPad
-            fullscreen
-            onHoldStart={startCamHold}
-            onHoldEnd={stopCamHold}
-            onCenter={centerCam}
-            view={camView}
-            onToggleView={toggleCamView}
-          />
-
-          {/* Commandes du bas : conduite a deux pouces */}
-          {/*
-          Direction a GAUCHE, avancer-reculer a DROITE : on tient le
-          telephone a deux mains et chaque pouce reste sur son groupe, sans
-          traverser l'ecran. C'est la disposition des manettes de jeu, pour
-          la meme raison.
-
-          Le joystick occupait la place de gauche et ne repondait plus. Il
-          etait aussi le SEUL a pouvoir tourner, car le seul a envoyer le
-          pilotage differentiel M<g>,<d> — un format qui n'arrivait jamais
-          jusqu'au robot, alors que son ordre d'arret, lui, partait bien.
-          D'ou un robot qui ne repondait plus qu'en s'arretant.
-        */}
-          {/* Conduite : pilote uniquement. Le serveur refuse de toute facon les
-            ordres d'un spectateur — ceci evite surtout de lui presenter des
-            boutons qui ne feraient rien. */}
-          {rtActif && (
-            <View style={styles.fsVeilleBandeau}>
-              <Text style={styles.fsVeilleTexte}>
-                {rtEveille
-                  ? 'SOLANA ECOUTE'
-                  : `EN VEILLE — DITES "${rtPhrase.toUpperCase()}"`}
-              </Text>
-            </View>
-          )}
-          {!estPilote && (
-            <View style={styles.fsRoleBandeau}>
-              <Text style={styles.fsRoleTexte}>
-                {role === 'attente' ? 'EN ATTENTE D ACCEPTATION' : 'SPECTATEUR, CAMERA SEULE'}
-              </Text>
-            </View>
-          )}
-          {estPilote && (
-            <View style={styles.fsBottomRow}>
-              {/* Pouce gauche : la direction. */}
-              <View style={styles.camPadGroupRow}>
-                <TouchableOpacity
-                  style={styles.camPadBtn}
-                  onPressIn={() => startRobotDriveHold('L')}
-                  onPressOut={stopRobotDriveHold}
-                >
-                  <Text style={styles.camPadSymbol}>◀</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.camPadBtn}
-                  onPressIn={() => startRobotDriveHold('R')}
-                  onPressOut={stopRobotDriveHold}
-                >
-                  <Text style={styles.camPadSymbol}>▶</Text>
-                </TouchableOpacity>
+          {dialog && (
+            <View
+              style={pilot.overlay}
+              accessibilityViewIsModal={!archiveOpen}
+              accessibilityElementsHidden={archiveOpen}
+              importantForAccessibility={archiveOpen ? 'no-hide-descendants' : 'auto'}
+            >
+              <Pressable accessibilityLabel="Fermer la modale" onPress={closeDialog} style={pilot.backdrop} />
+              <View style={[pilot.dialog, dialog === 'map' && pilot.mapDialog]}>
+                <View style={pilot.dialogHeader}>
+                  <Text accessibilityRole="header" style={pilot.title}>{dialog === 'options' ? 'Options de pilotage' : 'Carte du robot'}</Text>
+                  <PilotButton label="Fermer" onPress={closeDialog} />
+                </View>
+                {dialog === 'map' ? (
+                  <>
+                    <View style={pilot.optionRow}>
+                      <PilotButton label="GPS" active={mapTab === 'gps'} onPress={() => setMapTab('gps')} style={pilot.fill} />
+                      <PilotButton label="Sonar" active={mapTab === 'sonar'} onPress={() => openMap('sonar')} style={pilot.fill} />
+                    </View>
+                    <View style={pilot.map}>
+                      {mapTab === 'gps' ? <PilotGpsMap {...gps} /> : (
+                        <SonarMapView
+                          key={pairCode}
+                          connected={socketOnline}
+                          canViewScans={estPilote || role === 'spectateur'}
+                          isPilot={estPilote}
+                          socketRef={socketRef}
+                          snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
+                        />
+                      )}
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={pilot.optionRow}>
+                      <PilotButton label="Caméra" active={option === 'camera'} onPress={() => setOption('camera')} style={pilot.fill} />
+                      <PilotButton label="Audio" active={option === 'audio'} onPress={() => { stopCamHold(); setOption('audio'); }} style={pilot.fill} />
+                      <PilotButton label="Alertes" active={option === 'alerts'} onPress={() => { stopCamHold(); setOption('alerts'); }} style={pilot.fill} />
+                    </View>
+                    <ScrollView style={pilot.optionScroll} contentContainerStyle={pilot.options}>
+                      {option === 'camera' && (
+                        <>
+                          <View style={pilot.optionRow}>
+                            <PilotButton label={camView === 'front' ? 'Caméra arrière' : 'Caméra avant'} onPress={toggleCamView} style={pilot.fill} />
+                            <PilotButton label={cameraOn ? 'Couper la caméra' : 'Allumer la caméra'} onPress={() => setCameraOn(!cameraOn)} style={pilot.fill} />
+                          </View>
+                          <View style={pilot.optionRow}>
+                            <PilotButton label={savingPhoto ? 'Enregistrement…' : 'Prendre une photo'} onPress={savePhoto} disabled={savingPhoto || !cameraOn} style={pilot.fill} />
+                            <PilotButton label={recActif ? 'Arrêter la vidéo' : 'Enregistrer la vidéo'} active={recActif} onPress={() => basculerRec(!recActif)} style={pilot.fill} />
+                          </View>
+                          <View style={pilot.controls}>
+                            <Text style={pilot.message}>Zoom</Text>
+                            <View style={pilot.group}>
+                              <PilotButton label="−" accessibilityLabel="Réduire le zoom" symbol onPress={() => bumpZoom(-0.25)} />
+                              <PilotButton label={`${camZoom.toFixed(2).replace('.', ',')}×`} accessibilityLabel="Réinitialiser le zoom" onPress={() => setCamZoom(1)} />
+                              <PilotButton label="+" accessibilityLabel="Augmenter le zoom" symbol onPress={() => bumpZoom(0.25)} />
+                            </View>
+                          </View>
+                          <Text style={pilot.message}>Orientation de la caméra</Text>
+                          <View style={[pilot.group, { justifyContent: 'center' }]}>
+                            <PilotButton label="◀" accessibilityLabel="Orienter à gauche" symbol onPressIn={() => startCamHold(1, 0)} onPressOut={stopCamHold} />
+                            <PilotButton label="▲" accessibilityLabel="Orienter vers le haut" symbol onPressIn={() => startCamHold(0, 1)} onPressOut={stopCamHold} />
+                            <PilotButton label="◎" accessibilityLabel="Recentrer la caméra" symbol onPress={centerCam} />
+                            <PilotButton label="▼" accessibilityLabel="Orienter vers le bas" symbol onPressIn={() => startCamHold(0, -1)} onPressOut={stopCamHold} />
+                            <PilotButton label="▶" accessibilityLabel="Orienter à droite" symbol onPressIn={() => startCamHold(-1, 0)} onPressOut={stopCamHold} />
+                          </View>
+                        </>
+                      )}
+                      {option === 'audio' && (
+                        <>
+                          <View style={pilot.optionRow}>
+                            <PilotButton label="Écouter" active={listening} onPress={toggleListening} style={pilot.fill} />
+                            <PilotButton label="Parler au talkie" active={talking} onPress={handleTalk} style={pilot.fill} />
+                          </View>
+                          <PilotButton label="Réveiller l’assistant vocal" active={askingVoice} onPress={askRobotVoice} />
+                          <PilotButton label="Conversation IA en direct" active={rtActif} onPress={() => basculerRt(!rtActif)} />
+                          <PilotButton label={hautParleur ? 'Sortie : haut-parleur' : 'Sortie : écouteur'} active={hautParleur} onPress={() => setHautParleur((value) => !value)} />
+                        </>
+                      )}
+                      {option === 'alerts' && (
+                        <>
+                          <View style={pilot.optionRow}>
+                            <PilotButton label="Carte sonar" onPress={() => openMap('sonar')} style={pilot.fill} />
+                            <PilotButton label="Enregistrements" onPress={() => {
+                              setVideosOuvert(true);
+                              void chargerVideos();
+                            }} style={pilot.fill} />
+                          </View>
+                          <View style={pilot.optionRow}>
+                            <PilotButton label="Historique des alertes" onPress={() => {
+                              setHistoOuvert(true);
+                              void chargerHistorique();
+                            }} style={pilot.fill} />
+                            <PilotButton label="Dernière photo d’alerte" disabled={!alertePhoto} onPress={() => {
+                              setAlerteGrande(true);
+                            }} style={pilot.fill} />
+                          </View>
+                          <PilotButton
+                            label={alarmeOn ? 'Couper l’alarme' : 'Alarme · appui long'}
+                            warning
+                            active={alarmeOn}
+                            onPress={() => { if (alarmeOn) basculerAlarme(false); }}
+                            onLongPress={() => { if (!alarmeOn) basculerAlarme(true); }}
+                            delayLongPress={700}
+                          />
+                        </>
+                      )}
+                    </ScrollView>
+                  </>
+                )}
               </View>
-
-              <TouchableOpacity
-                style={[styles.camPadBtn, styles.camPadStop]}
-                onPress={stopRobotDriveHold}
-              >
-                <Text style={styles.camPadSymbol}>■</Text>
-              </TouchableOpacity>
-
-              {/* Pouce droit : avancer et reculer. */}
-              <View style={styles.camPadGroupCol}>
-                <TouchableOpacity
-                  style={styles.camPadBtn}
-                  onPressIn={() => startRobotDriveHold('F')}
-                  onPressOut={stopRobotDriveHold}
-                >
-                  <Text style={styles.camPadSymbol}>▲</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.camPadBtn}
-                  onPressIn={() => startRobotDriveHold('B')}
-                  onPressOut={stopRobotDriveHold}
-                >
-                  <Text style={styles.camPadSymbol}>▼</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {estPilote && !!robotCommandStatus && (
-            <View style={styles.fsDriveStatus}>
-              <Text accessibilityLiveRegion="polite" numberOfLines={1} style={styles.fsDriveStatusText}>
-                {robotCommandStatus}
-              </Text>
             </View>
           )}
 
@@ -618,7 +585,7 @@ export function CameraModal({
             l'image d'une notification sans extension native. */}
           {!!alertePhoto && alerteGrande && (
             <View style={styles.alerteFond}>
-              <Text style={styles.alerteTitre}>Photo de l'alerte</Text>
+              <Text style={styles.alerteTitre}>Photo de l’alerte</Text>
               <Image
                 source={{ uri: alertePhoto }}
                 style={styles.alerteImage}
@@ -633,7 +600,7 @@ export function CameraModal({
             </View>
           )}
         </View>
-      </Modal>
-    </>
+      </SafeAreaView>
+    </Modal>
   );
 }

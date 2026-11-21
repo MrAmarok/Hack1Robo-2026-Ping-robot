@@ -224,4 +224,3 @@ DOC = {
     "health": dict(tags=[T_SANTE], summary="État du serveur",
                    responses={200: {"model": Sante, "description": "`{\"status\": \"ok\"}`."}}),
 }
-

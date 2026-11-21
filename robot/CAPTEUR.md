@@ -176,6 +176,9 @@ Le même protocole est décrit dans le Swagger du serveur (`/docs`), sections «
 Le test le plus rapide : taper `capteur 0,0,0,0,143` dans le terminal de `robot.js`, puis regarder la ligne arriver
 dans le fichier du serveur.
 
+Sans robot sous la main, `server/sonar-mapping/simuler_robot.py` se fait passer pour lui et envoie un parcours
+complet de mesures ; voir [Tester sans robot](../server/README.md#tester-sans-robot--le-simulateur).
+
 | Où | Commande ou message | Ce que ça dit |
 | --- | --- | --- |
 | Terminal de `robot.js` | `capteur` | état : `session`, `connecte`, `enAttente`, `acceptees`, `perdues` |

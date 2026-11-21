@@ -32,6 +32,28 @@ Ajouter une dépendance : `uv add <paquet>` (ou `uv add --dev <paquet>` pour les
 
 Healthcheck : `GET /` → `OK`, `GET /health` → `{"status":"ok"}`.
 
+## Install as a systemd service
+
+On the VPS, run the installer from the new checkout as the account that should
+run the server. Install `uv` for that account first. If migrating from the old
+Node server, copy its settings into `server/.env` and stop its PM2 application
+before starting the service. Keep any existing data paths the new server needs.
+
+```bash
+cd server
+./install-service.sh
+curl -fsS http://127.0.0.1:3000/health
+sudo journalctl -u ping-server -f
+```
+
+The installer syncs the locked dependencies, writes `ping-server.service`,
+starts it, and enables it at boot. It uses port 3000. Run
+`PORT=3002 ./install-service.sh` to use a different port. This install setting
+takes precedence over `PORT` in `.env`.
+
+Run the installer again after updating the checkout to sync dependencies and
+restart the service. Reuse the same `PORT` value if you chose a custom port.
+
 ## Organisation
 
 | Fichier | Rôle | Ancien emplacement |
@@ -139,6 +161,162 @@ renvoie le CSV, à passer tel quel à la carte :
 ```sh
 curl -o session.csv "http://<serveur>:3000/capteur/<session>?code=<code>"
 uv run --locked --script server/sonar-mapping/map_sonar.py session.csv carte.png
+```
+
+### Indoor scans in the mobile app
+
+Open **Indoor map** from the fullscreen camera. The pilot can tap **Start scan**, drive the
+robot to collect readings, and tap **Save scan** to build the map. The pilot and admitted
+spectators can reopen maps through **Saved scans**.
+
+A scan includes valid CSV rows received after Start and before Save. Each row already
+contains the sensor pose at measurement time, so the server does not add a timestamp
+column. The server keeps the CSV and the generated map in
+`CAPTEUR_DIR/<code>/sonar-scans/`. A zero or blank distance is stored in the CSV, and only
+echoes from 2 to 400 cm contribute to the map. Mapping a room while the robot moves
+requires the actual position and heading for each echo.
+
+### Tester sans robot : le simulateur
+
+`sonar-mapping/simuler_robot.py` joue le rôle du robot. Il se connecte au serveur comme `robot.js` et envoie des
+mesures sonar :
+
+- **WebSocket `/ws/capteur`** : les lignes partent par lots toutes les 200 ms. Le simulateur garde chaque ligne
+  jusqu'à l'accusé du serveur ; après une coupure, il se reconnecte et renvoie les lignes non accusées, dans la même
+  session.
+- **Socket.IO** : `pair {robot: true}` dans le salon `--code`. L'app voit le robot en ligne et peut le conduire
+  (`drive` et `robot_drive` : `F B L R S`, `V<n>`, `+`, `-`, `M<g>,<d>`).
+
+Le robot roule dans une pièce virtuelle de 5 m × 4 m meublée d'un canapé, d'une table et d'un carton. Chaque
+distance est calculée jusqu'au premier obstacle, avec le comportement d'un HC-SR04 : quelques cm d'erreur, pas
+d'écho au-delà de 4 m, échos souvent perdus sur un mur pris trop en biais.
+
+```sh
+cd server
+uv run python sonar-mapping/simuler_robot.py --code 1234             # tour de la piece (~1 min 30), puis s'arrete
+uv run python sonar-mapping/simuler_robot.py --code 1234 --accel 5   # meme tour, 5 fois plus vite
+uv run python sonar-mapping/simuler_robot.py --code 1234 --pilote    # attend les ordres de l'app (Ctrl+C pour finir)
+uv run python sonar-mapping/simuler_robot.py --code 1234 --csv sonar-mapping/samples/simulated-room.csv
+```
+
+Depuis la racine du dépôt : `uv run --project server python server/sonar-mapping/simuler_robot.py …`.
+
+| Option | Défaut | Rôle |
+| --- | --- | --- |
+| `--url` | `$SERVER_URL` ou `http://localhost:8000` | adresse du serveur ; `http://localhost:3000` avec `uv run ping-server` |
+| `--code` | `$CODE` ou `1234` | code du salon |
+| `--session` | `sim-AAAAMMJJ-hhmmss` | fichier `capteur/<code>/<session>.csv` côté serveur |
+| `--cle` | `$ROBOT_KEY` | à passer si `ROBOT_KEY` est configurée sur le serveur |
+| `--pilote` | non | le robot attend les ordres de l'app au lieu de faire le tour |
+| `--boucle` | non | recommence le tour (ou le CSV) sans fin |
+| `--accel` | `1` | accélère le temps simulé du tour |
+| `--csv` | — | rejoue ce fichier CSV ligne par ligne au lieu de simuler |
+| `--frequence` | `10` | lignes par seconde avec `--csv` |
+| `--sans-bruit` | non | mesures parfaites, sans bruit ni écho perdu |
+| `--sans-socketio` | non | n'ouvre que le WebSocket capteur ; le robot n'apparaît pas dans l'app |
+| `--graine` | aléatoire | mêmes mesures d'une exécution à l'autre |
+| `--scan` | non | fait **Start scan** puis **Save scan** à la place de l'app et écrit la carte calculée par le serveur |
+| `--carte` | `.simulation.ignore/carte-<scan>.png` | fichier PNG de la carte avec `--scan` |
+| `--pseudo-scan` | `Pilote simule` | pseudo du pilote ouvert par `--scan` |
+
+En mode tour, le robot passe en pilotage manuel dès que le pilote touche au joystick. Sans ordre depuis 1 s, il
+s'arrête, comme si le bouton avait été relâché.
+
+Socket.IO passe par le client du groupe dev (`uv sync` l'installe). S'il manque, le simulateur n'ouvre que le
+WebSocket capteur.
+
+**Voir la carte**
+
+- **Sans l'app, carte calculée par le serveur.** Avec `--scan`, le simulateur s'appaire aussi comme pilote, lance
+  `sonar_scan_start`, fait son tour, puis `sonar_scan_save`. C'est le même chemin que **Start scan** / **Save scan**
+  dans l'app. Le serveur calcule la carte avec `sonar_mapper` et le simulateur l'écrit en PNG :
+
+  ```sh
+  uv run python sonar-mapping/simuler_robot.py --code 1234 --accel 5 --scan
+  ```
+
+  La carte arrive dans `sonar-mapping/.simulation.ignore/carte-<scan>.png` (ou le fichier passé à `--carte`).
+
+  Seul le pilote peut lancer un scan : si l'app est déjà pilote du salon, le simulateur s'arrête tout de suite et le
+  dit. Si l'app arrive pendant le scan, elle est acceptée comme spectatrice et redevient pilote à la fin. Le scan
+  reste dans `capteur/<code>/sonar-scans/` et dans l'historique de l'app (**Indoor map**). `--scan` ne se combine
+  pas avec `--pilote`, puisqu'il prend la place du pilote.
+- **Dans l'app.** Lancer Expo sur le serveur local (`EXPO_PUBLIC_PING_SERVER_ORIGIN=http://localhost:8000 npm start`,
+  puis `w`), s'appairer avec le même code, ouvrir la caméra en plein écran (⛶), puis **Indoor map** →
+  **Start scan**. Lancer le simulateur, puis **Save scan** quand il a fini. Seules les lignes reçues après
+  **Start scan** entrent dans le scan. Sur un téléphone, le serveur doit écouter sur le réseau (`--host 0.0.0.0`) et
+  la variable doit contenir l'IP du PC.
+- **En image.** Sans `--scan`, le simulateur affiche à la fin les deux commandes à lancer depuis `server/` :
+
+  ```sh
+  curl --create-dirs -o sonar-mapping/.simulation.ignore/<session>.csv "http://localhost:8000/capteur/<session>?code=1234"
+  uv run --locked --script sonar-mapping/map_sonar.py sonar-mapping/.simulation.ignore/<session>.csv \
+    sonar-mapping/.simulation.ignore/carte-<session>.png
+  ```
+
+  L'image compte un pixel par case de 5 cm : il faut zoomer pour la lire.
+
+Les résultats des simulations (CSV, cartes) vont dans `sonar-mapping/.simulation.ignore/`, que git ignore.
+
+Le simulateur sort en code 1 si le serveur refuse la connexion (code manquant, clé invalide…) ou si aucune ligne
+n'a été acceptée.
+
+### Simuler le drift : `simuler_drift.py`
+
+Sur le vrai robot, la pose envoyée vient de l'odométrie et du compas : elle dérive. Le HC-SR04 dérive aussi, par
+exemple quand la température change la vitesse du son. `sonar-mapping/simuler_drift.py` mesure l'effet de ces
+dérives sur la carte de `sonar_mapper`. Il fait le même tour de la même pièce que `simuler_robot.py`, avec le
+capteur **fixe vers l'avant** (`sensor_angle_deg` toujours à 0, comme le vrai robot). Le robot bouge à sa vraie
+place, mais il envoie :
+
+- **drift de pose** : une pose recalculée par odométrie, avec un cap qui dérive (biais et bruit du gyro), une erreur
+  d'échelle sur les distances parcourues, du glissement de roues, et un drift direct de x et de y ;
+- **drift de distance** : des distances qui s'allongent avec le temps (en cm/min ou en %/min), ou dont le biais erre
+  au hasard.
+
+Le script tourne hors ligne, sans serveur. Il calcule chaque carte avec `sonar_mapper.build_map`, en 5 cm par pixel,
+comme **Save scan** côté back.
+
+```sh
+cd server
+uv run python sonar-mapping/simuler_drift.py                          # les 12 exemples (~25 s)
+uv run python sonar-mapping/simuler_drift.py --liste                  # liste des exemples
+uv run python sonar-mapping/simuler_drift.py --exemple pose-cap-rapide
+uv run python sonar-mapping/simuler_drift.py --nom essai --derive-cap 6 --biais-distance 5 --tours 2
+```
+
+| Exemple | Ce qui dérive |
+| --- | --- |
+| `reference-balayage` | rien, capteur qui balaie : c'est l'algo de `simuler_robot.py` |
+| `reference-fixe` | rien, capteur fixe : la base de comparaison |
+| `pose-cap-lent`, `pose-cap-rapide` | le cap, 3 ou 12°/min |
+| `pose-xy` | x et y, +12 et -8 cm/min |
+| `pose-odometrie`, `pose-odometrie-3-tours` | odométrie réaliste (échelle +4 %, cap +4°/min, bruit, glissement), 1 ou 3 tours |
+| `distance-biais`, `distance-biais-3-tours` | les distances, +10 cm/min, 1 ou 3 tours |
+| `distance-echelle` | les distances, +3 %/min |
+| `distance-hasard` | le biais des distances, au hasard |
+| `pose-et-distance` | odométrie réaliste et distances +10 cm/min |
+
+Réglages d'un exemple perso (avec `--nom`) : `--derive-x`, `--derive-y` (cm/min), `--derive-cap` (°/min),
+`--bruit-cap` (°/√s), `--echelle-odo` (%), `--glissement` (cm/√m), `--biais-distance` (cm/min), `--echelle-distance`
+(%/min), `--hasard-distance` (cm/√s), `--tours`, `--balayage`. `--graine` change le tirage (1 par défaut),
+`--sans-bruit` retire le bruit du capteur pour ne garder que le drift.
+
+Chaque exemple écrit dans `sonar-mapping/.simulation.ignore/drift/<exemple>/` :
+
+- `donnees.csv` : ce que le robot envoie au serveur ;
+- `verite.csv` : la vraie pose et la vraie distance, ligne par ligne, à côté des valeurs envoyées ;
+- `carte.png` : la carte brute ;
+- `comparaison.png` : la carte agrandie, avec la vraie pièce (rouge), le vrai trajet (vert) et le trajet envoyé (bleu) ;
+- `mesures.json` : erreur de position et de cap à la fin, écart moyen des distances, et deux scores de la carte
+  (part des murs noirs bien placés, part des vrais murs retrouvés, à 10 cm près).
+
+`drift/resultats.md` récapitule tous les exemples dans un tableau. Pour faire calculer la carte d'un exemple par le
+back, on rejoue son CSV avec `--scan`. La carte obtenue est identique pixel pour pixel :
+
+```sh
+uv run python sonar-mapping/simuler_robot.py --code 1234 --scan --frequence 50 \
+  --csv sonar-mapping/.simulation.ignore/drift/pose-odometrie/donnees.csv
 ```
 
 ## Documentation (Swagger)
