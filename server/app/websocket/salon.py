@@ -17,6 +17,7 @@ from app.services.push import (
     add_persistent_token, get_tokens_for_room, is_expo_push_token,
     send_silent_sync_push_to_room, send_visible_push_to_pseudos, send_visible_push_to_room,
 )
+from app.websocket.sonar import send_latest
 
 
 @on_connect
@@ -50,6 +51,7 @@ async def _pair(sid, data):
 
     users[sid] = {"pseudo": pseudo, "code": code}
     await enter_room(sid, code)
+    await send_latest(sid, code)
     uid, _ = ensure_profile(code, pseudo)
     socket_to_user_id[sid] = uid
     mark_online(uid)
@@ -177,6 +179,7 @@ async def _acces_reponse(sid, data):
         await enter_room(cible, code)
         groupe_spectateurs(code).add(cible)
         await emit_to(cible, "role_acces", {"role": "spectateur"})
+        await send_latest(cible, code)
         await emit_room(code, "user_joined", {"pseudo": dem["pseudo"]})
         log(f"[ROLE] {code} : '{dem['pseudo']}' accepte comme spectateur.")
     else:

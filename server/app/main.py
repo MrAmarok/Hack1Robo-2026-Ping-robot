@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import socket
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import socketio
 from fastapi import FastAPI
@@ -12,11 +13,11 @@ from app.core.config import DEFAULT_PORT, PORT
 from app.core.logs import log
 from app.core.sio import sio
 
-from app.websocket import robot, salon
+from app.websocket import robot, salon, sonar
 from app.services import alertes, push
 from app.api.routes import router as http_router
 
-GESTIONNAIRES_SOCKET = (robot, salon, alertes)
+GESTIONNAIRES_SOCKET = (robot, salon, sonar, alertes)
 
 
 _OPTIONNELS = [
@@ -48,7 +49,13 @@ async def lifespan(_app: FastAPI):
         except Exception as e:
             log(f"{prefixe} {msg} : {e!r}")
     log("✅ Serveur prêt" + (f" sur le port {_port_ecoute}" if _port_ecoute else ""))
-    yield
+    sonar_task = asyncio.create_task(sonar.watch_snapshots())
+    try:
+        yield
+    finally:
+        sonar_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await sonar_task
 
 
 fastapi_app = FastAPI(title="Ping server", version="2.0.0", lifespan=lifespan)

@@ -42,6 +42,7 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadNativeMaps } from '@/components/nativeMaps';
+import { SonarMapView, type SonarSnapshot } from '@/components/SonarMapView';
 
 // ========================
 // Constantes & config
@@ -58,8 +59,11 @@ import { loadNativeMaps } from '@/components/nativeMaps';
 // a une autre application du VPS. Le robot, lui, garde son acces direct.
 //
 // Au passage, le flux de surveillance ne circule plus en clair.
-const ORIGINE_SERVEUR = 'https://api.ping-app.org';
-const SOCKET_URL = `${ORIGINE_SERVEUR}/ping`;
+const LOCAL_SERVER_ORIGIN = process.env.EXPO_PUBLIC_PING_SERVER_ORIGIN?.replace(/\/+$/, '');
+const ORIGINE_SERVEUR = LOCAL_SERVER_ORIGIN || 'https://api.ping-app.org';
+const SERVER_PREFIX = LOCAL_SERVER_ORIGIN ? '' : '/ping';
+const SOCKET_URL = `${ORIGINE_SERVEUR}${SERVER_PREFIX}`;
+const SOCKET_PATH = `${SERVER_PREFIX}/socket.io/`;
 // Video WebRTC : le robot pousse un H.264 vers MediaMTX (sur le VPS), l'app le
 // lit en WHEP via le proxy /rtc du serveur (seul port HTTP ouvert). Le module
 // natif peut manquer dans un ancien build installe -> require() protege, et
@@ -576,6 +580,8 @@ export default function App() {
   const [pairCode, setPairCode] = useState('');
   const [customMessage, setCustomMessage] = useState('');
   const [socketOnline, setSocketOnline] = useState(false);
+  const [sonarOpen, setSonarOpen] = useState(false);
+  const [sonarSnapshot, setSonarSnapshot] = useState<SonarSnapshot | null>(null);
   const [pairedWith, setPairedWith] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [robotCommandStatus, setRobotCommandStatus] = useState('');
@@ -970,7 +976,7 @@ export default function App() {
     // comme un espace de noms et se connecterait a la mauvaise destination.
     // Le prefixe se declare dans `path`.
     const s = io(ORIGINE_SERVEUR, {
-      path: '/ping/socket.io/',
+      path: SOCKET_PATH,
       transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -979,7 +985,16 @@ export default function App() {
       timeout: 10000,
     });
     socketRef.current = s;
-    pushRobotLog(`socket init -> ${ORIGINE_SERVEUR} (chemin /ping/socket.io/)`);
+    pushRobotLog(`socket init -> ${ORIGINE_SERVEUR} (chemin ${SOCKET_PATH})`);
+
+    s.on('sonar_map_snapshot', (snapshot: SonarSnapshot) => {
+      if (snapshot.code !== pairCodeRef.current.trim()) return;
+      setSonarSnapshot((current) =>
+        current?.code === snapshot.code && current.updatedAt >= snapshot.updatedAt
+          ? current
+          : snapshot
+      );
+    });
 
     const savePairLocal = async (p: { code: string; pseudo: string }) =>
       AsyncStorage.setItem('pair', JSON.stringify(p));
@@ -2914,6 +2929,7 @@ export default function App() {
     await AsyncStorage.multiRemove(['pair', 'pseudo', 'pairCode', 'lastSeen']);
     setPseudo('');
     setPairCode('');
+    setSonarSnapshot(null);
     setPairedWith('');
     setMeetRequestFrom(null);
     setMeetStatus(null);
@@ -3393,6 +3409,14 @@ ${tk.slice(0, 32)}…`);
           </Text>
         </View>
 
+        <PrimaryButton
+          label="Live sonar map"
+          onPress={() => {
+            setSonarOpen(true);
+            socketRef.current?.emit('sonar_map_request');
+          }}
+        />
+
         {/* === Mode de surveillance === */}
         {/* Premier element de la page : c'est la question a laquelle on repond
             en ouvrant l'app quand on part de chez soi. */}
@@ -3728,6 +3752,13 @@ ${tk.slice(0, 32)}…`);
           <PrimaryButton label="SE DÉCONNECTER" onPress={onUnpair} />
         )}
       </View>
+
+      <SonarMapView
+        visible={sonarOpen}
+        connected={socketOnline}
+        snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
+        onClose={() => setSonarOpen(false)}
+      />
 
       {/* ======== TUTORIEL (MODAL) ======== */}
       {/* === Camera plein ecran + commandes de pilotage === */}

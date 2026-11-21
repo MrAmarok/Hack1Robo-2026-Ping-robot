@@ -6,10 +6,16 @@
 """Build an occupancy grid from HC-SR04 readings with known poses."""
 
 import argparse
+import base64
 import csv
+import io
+import json
 import math
+import tempfile
+import time
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
 
 from PIL import Image
@@ -50,12 +56,15 @@ def load_readings(path: Path) -> list[Reading]:
     return readings
 
 
-def build_map(readings: list[Reading], resolution: float) -> tuple[Image.Image, tuple[float, float]]:
-    margin = max(reading.range_m for reading in readings) + 2 * resolution
-    left = min(reading.x for reading in readings) - margin
-    bottom = min(reading.y for reading in readings) - margin
-    width_cells = (max(reading.x for reading in readings) + margin - left) / resolution
-    height_cells = (max(reading.y for reading in readings) + margin - bottom) / resolution
+def build_map(
+    readings: list[Reading], resolution: float, *, extent: list[Reading] | None = None,
+) -> tuple[Image.Image, tuple[float, float]]:
+    bounds_readings = extent if extent is not None else readings
+    margin = max(reading.range_m for reading in bounds_readings) + 2 * resolution
+    left = min(reading.x for reading in bounds_readings) - margin
+    bottom = min(reading.y for reading in bounds_readings) - margin
+    width_cells = (max(reading.x for reading in bounds_readings) + margin - left) / resolution
+    height_cells = (max(reading.y for reading in bounds_readings) + margin - bottom) / resolution
     if not all(1 <= size <= 1_000_000 for size in (width_cells, height_cells)):
         raise ValueError("invalid map dimensions. Check --resolution and the input coordinates")
     width, height = math.ceil(width_cells), math.ceil(height_cells)
@@ -92,6 +101,9 @@ def build_map(readings: list[Reading], resolution: float) -> tuple[Image.Image, 
         if score:
             image.putpixel((col, height - 1 - row), OCCUPIED if score > 0 else FREE)
 
+    if extent is not None:
+        return image, (left, bottom)
+
     bounds = image.point(lambda pixel: 255 if pixel != UNKNOWN else 0).getbbox()
     if bounds:
         x0, y0, x1, y1 = bounds
@@ -103,28 +115,87 @@ def build_map(readings: list[Reading], resolution: float) -> tuple[Image.Image, 
     return image, (left, bottom)
 
 
+def encode_snapshot(image: Image.Image, image_format: str) -> str:
+    if image_format == "png":
+        with io.BytesIO() as buffer:
+            image.save(buffer, format="PNG")
+            return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+    width, height = image.size
+    pixels = image.tobytes()
+    paths: dict[int, list[str]] = {FREE: [], OCCUPIED: []}
+    for y in range(height):
+        x = 0
+        for pixel, group in groupby(pixels[y * width:(y + 1) * width]):
+            length = sum(1 for _ in group)
+            if pixel != UNKNOWN:
+                paths[pixel].append(f"M{x} {y}h{length}v1h-{length}z")
+            x += length
+
+    free = "".join(paths[FREE])
+    occupied = "".join(paths[OCCUPIED])
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
+        'shape-rendering="crispEdges">'
+        f'<rect width="{width}" height="{height}" fill="#a0a0a0"/>'
+        f'<path fill="#fff" d="{free}"/><path fill="#000" d="{occupied}"/></svg>'
+    )
+
+
+def replay(readings: list[Reading], resolution: float, output: Path, image_format: str) -> None:
+    step = 12
+    total = len(readings)
+    for end in range(step, total + step, step):
+        count = min(end, total)
+        image, _ = build_map(readings[:count], resolution, extent=readings)
+        snapshot = {
+            "image": {"format": image_format, "data": encode_snapshot(image, image_format)},
+            "readingCount": count,
+            "totalReadings": total,
+            "resolutionM": resolution,
+            "updatedAt": time.time_ns() // 1_000_000,
+        }
+        with tempfile.NamedTemporaryFile(dir=output.parent, delete=False, mode="w", encoding="utf-8") as file:
+            temporary = Path(file.name)
+            try:
+                json.dump(snapshot, file)
+                file.close()
+                temporary.replace(output)
+            finally:
+                temporary.unlink(missing_ok=True)
+        if count < total:
+            time.sleep(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv", type=Path, help="CSV of sonar readings and poses")
-    parser.add_argument("png", type=Path, help="output occupancy map")
+    parser.add_argument("output", type=Path, help="output PNG, or snapshot JSON in live replay mode")
+    parser.add_argument("--live", action="store_true", help="replay the CSV and publish updated snapshots")
+    parser.add_argument("--format", choices=("png", "svg"), default="png", help="image format for live snapshots")
     parser.add_argument("--resolution", type=float, default=0.05, help="meters per grid cell (default: 0.05)")
     args = parser.parse_args()
     if not math.isfinite(args.resolution) or args.resolution < 0.01:
         parser.error("--resolution must be at least 0.01 m")
-    if args.png.suffix.lower() != ".png":
-        parser.error("output must have a .png extension")
+    suffix = ".json" if args.live else ".png"
+    if args.output.suffix.lower() != suffix:
+        parser.error(f"output must have a {suffix} extension")
 
     try:
         readings = load_readings(args.csv)
+        if args.live:
+            replay(readings, args.resolution, args.output, args.format)
+            print(f"Replayed {len(readings)} echoes to {args.output}.")
+            return
         image, (left, bottom) = build_map(readings, args.resolution)
         metadata = PngInfo()
         metadata.add_text("resolution_m", str(args.resolution))
         metadata.add_text("origin_x_m", str(left))
         metadata.add_text("origin_y_m", str(bottom))
-        image.save(args.png, pnginfo=metadata)
+        image.save(args.output, pnginfo=metadata)
     except (OSError, ValueError, csv.Error) as error:
         parser.exit(1, f"Error: {error}\n")
-    print(f"{args.png}: {len(readings)} echoes, {image.width} × {image.height} cells "
+    print(f"{args.output}: {len(readings)} echoes, {image.width} × {image.height} cells "
           f"at {args.resolution:g} m/cell. Lower-left corner: ({left:.3f}, {bottom:.3f}) m.")
 
 
