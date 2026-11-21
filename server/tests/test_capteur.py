@@ -121,3 +121,47 @@ async def test_logs_du_serveur(serveur, capsys):
     assert "message recu, 1 ligne(s) acceptee(s), 1 refusee(s), total 1 - derniere : 0,0,0,0,143" in sortie
     assert "resume 1 s -> 1 message(s), 1 ligne(s) acceptee(s), 1 refusee(s), total 1" in sortie
     assert "robot deconnecte (session logs, 1 ligne(s) recue(s) pendant cette connexion, 1 au total" in sortie
+
+
+async def test_mobile_scan_records_and_reopens_map(serveur):
+    from app.services import sonar_scans
+    from tests.test_integration import salon
+
+    code = nouveau_code()
+    pilot, paired_robot = await salon(serveur, code)
+    other_pilot, other_robot = await salon(serveur, nouveau_code())
+    try:
+        async with Robot(serveur, code=code) as sensor:
+            await sensor.recevoir()
+            await sensor.envoyer("10,0,0,0,60")
+            status = await pilot.sio.call("sonar_scan_start")
+            session = status["session"]
+            assert (await pilot.sio.call("sonar_scan_start"))["session"] == session
+            assert "error" in await paired_robot.sio.call("sonar_scan_start")
+            assert (await pilot.sio.call("sonar_scan_list"))["scans"] == []
+
+            payload = {"session": session}
+            await sensor.envoyer("0,0,0,0,0\n-0.60,0,0,0,60.00\ninvalid")
+            saved = await pilot.sio.call("sonar_scan_save", payload)
+            assert saved["mapError"] is None
+            assert saved["snapshot"]["readingCount"] == 1
+            assert saved["snapshot"]["image"]["data"].startswith("iVBORw0KGgo")
+            await sensor.envoyer("20,0,0,0,60")
+
+            assert (sonar_scans.directory(code) / f"{session}.csv").read_text().splitlines() == [
+                capteur.ENTETE, "0,0,0,0,0", "-0.60,0,0,0,60.00",
+            ]
+            assert (await pilot.sio.call("sonar_scan_status"))["session"] is None
+            assert (await pilot.sio.call("sonar_scan_list"))["scans"][0]["session"] == session
+            assert await pilot.sio.call("sonar_scan_open", payload) == saved
+            assert await pilot.sio.call("sonar_scan_save", payload) == saved
+            assert "error" in await other_pilot.sio.call("sonar_scan_open", payload)
+
+            empty = await pilot.sio.call("sonar_scan_start")
+            await sensor.envoyer("0,0,0,0,0")
+            no_echo = await pilot.sio.call("sonar_scan_save", {"session": empty["session"]})
+            assert no_echo["snapshot"] is None
+            assert "no valid HC-SR04 echoes" in no_echo["mapError"]
+    finally:
+        for client in (pilot, paired_robot, other_pilot, other_robot):
+            await client.fermer()

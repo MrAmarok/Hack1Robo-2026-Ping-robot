@@ -16,6 +16,7 @@ dependencies = [
     "anthropic>=2.12",
     # Conversation en direct OpenAI Realtime + flux audio Twilio.
     "websockets>=13",
+    "pillow>=11,<13",
 ]
 
 [project.scripts]

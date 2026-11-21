@@ -141,6 +141,19 @@ curl -o session.csv "http://<serveur>:3000/capteur/<session>?code=<code>"
 uv run --locked --script server/sonar-mapping/map_sonar.py session.csv carte.png
 ```
 
+### Indoor scans in the mobile app
+
+Open **Indoor map** from the fullscreen camera. The pilot can tap **Start scan**, drive the
+robot to collect readings, and tap **Save scan** to build the map. The pilot and admitted
+spectators can reopen maps through **Saved scans**.
+
+A scan includes valid CSV rows received after Start and before Save. Each row already
+contains the sensor pose at measurement time, so the server does not add a timestamp
+column. The server keeps the CSV and the generated map in
+`CAPTEUR_DIR/<code>/sonar-scans/`. A zero or blank distance is stored in the CSV, and only
+echoes from 2 to 400 cm contribute to the map. Mapping a room while the robot moves
+requires the actual position and heading for each echo.
+
 ## Documentation (Swagger)
 
 Serveur lancé, ouvrir **`/docs`** (Swagger) ou `/redoc` ; la spécification brute est sur `/openapi.json`.

@@ -160,7 +160,11 @@ export function CameraModal({
       >
         {sonarOpen && (
           <SonarMapView
+            key={pairCode}
             connected={socketOnline}
+            canViewScans={estPilote || role === 'spectateur'}
+            isPilot={estPilote}
+            socketRef={socketRef}
             snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
             onClose={() => setSonarOpen(false)}
           />
@@ -204,7 +208,7 @@ export function CameraModal({
                   socketRef.current?.emit('sonar_map_request');
                 }}
               >
-                <Text style={styles.fsSonarLabel}>Live sonar map</Text>
+                <Text style={styles.fsSonarLabel}>Indoor map</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.camPadSpeedBtn, listening && styles.fsAudioOn]}

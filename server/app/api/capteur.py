@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.api.doc_capteur import DOC
 from app.core.logs import log
 from app.core.state import cle_robot_valide
-from app.services import capteur
+from app.services import capteur, sonar_scans
 
 router = APIRouter()
 _PAS_CODE = re.compile(r"[^A-Za-z0-9_-]")
@@ -63,6 +63,7 @@ async def capteur_ws(ws: WebSocket):
             if valides:
                 try:
                     total = capteur.ajouter(code, session, valides)
+                    sonar_scans.record(code, valides)
                 except capteur.TropVolumineux as e:
                     log(f"[CAPTEUR] {code} : session {session} refusee ({e}), connexion fermee.")
                     await ws.send_json({"type": "erreur", "erreur": str(e)})
