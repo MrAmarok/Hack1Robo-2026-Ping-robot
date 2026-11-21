@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { RobotDriveCommand, RobotStatus } from './types';
 import { Alert } from 'react-native';
 import { ROBOT_DRIVE_BUZZ_PREFIX, ROBOT_DRIVE_LABELS, ROBOT_CAM_BUZZ_PREFIX, CAM_STEP_DEG } from './presets';
@@ -17,6 +17,7 @@ type DriveControlsOptions = {
   pseudoRef: React.RefObject<string>;
   setRobotCommandStatus: React.Dispatch<React.SetStateAction<string>>;
   isLandscape: boolean;
+  camFullscreen: boolean;
   setCameraOn: React.Dispatch<React.SetStateAction<boolean>>;
   setCamFullscreen: React.Dispatch<React.SetStateAction<boolean>>;
   robotStatus: RobotStatus | null;
@@ -36,6 +37,7 @@ export function useDriveControls({
   pseudoRef,
   setRobotCommandStatus,
   isLandscape,
+  camFullscreen,
   setCameraOn,
   setCamFullscreen,
   robotStatus,
@@ -49,7 +51,7 @@ export function useDriveControls({
   const camTiltRef = useRef(90);
   const camHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const sendRobotDrive = async (cmd: RobotDriveCommand) => {
+  const sendRobotDrive = useCallback(async (cmd: RobotDriveCommand) => {
     const code = pairCodeRef.current?.trim();
     if (!socketRef.current || !code || !pairedWith) {
       Alert.alert('Robot', 'Appaire-toi au robot avant de piloter.');
@@ -102,7 +104,17 @@ export function useDriveControls({
       }
     }, 10000);
     await setLastSeenNow();
-  };
+  }, [
+    navActive,
+    pairCodeRef,
+    pairedWith,
+    pendingRobotCmdRef,
+    pseudoRef,
+    pushRobotLog,
+    setNavActive,
+    setRobotCommandStatus,
+    socketRef,
+  ]);
 
   // --- Pilotage differentiel (virage en arc) ---
   //
@@ -212,12 +224,12 @@ export function useDriveControls({
     camHoldTimerRef.current = setInterval(() => stepCam(dPan, dTilt), 140);
   };
 
-  const stopCamHold = () => {
+  const stopCamHold = useCallback(() => {
     if (camHoldTimerRef.current) {
       clearInterval(camHoldTimerRef.current);
       camHoldTimerRef.current = null;
     }
-  };
+  }, []);
 
   const centerCam = () => {
     stopCamHold();
@@ -233,24 +245,6 @@ export function useDriveControls({
     setCamView(next);
     emitCamMove({ view: next });
   };
-
-  // Tourne le tel a l'horizontale -> plein ecran (allume la camera si besoin).
-  // Retour en portrait -> ferme. On ne reagit qu'au CHANGEMENT d'axe pour ne pas
-  // rouvrir apres une fermeture manuelle (✕) restee en paysage. La vue caméra ne
-  // change pas : c'est la camera normale (bouton AV/AR pour basculer).
-  // NB: necessite un build avec app.json orientation="default".
-  const prevLandscapeRef = useRef(false);
-  useEffect(() => {
-    if (isLandscape === prevLandscapeRef.current) return;
-    prevLandscapeRef.current = isLandscape;
-    if (!pairedWith) return;
-    if (isLandscape) {
-      setCameraOn(true);
-      setCamFullscreen(true);
-    } else {
-      setCamFullscreen(false);
-    }
-  }, [isLandscape, pairedWith, setCamFullscreen, setCameraOn]);
 
   // Nettoyage si l'ecran se demonte pendant un maintien de fleche camera.
   useEffect(
@@ -282,7 +276,7 @@ export function useDriveControls({
     }, 650);
   };
 
-  const stopRobotDriveHold = () => {
+  const stopRobotDriveHold = useCallback(() => {
     if (robotHoldTimerRef.current) {
       clearInterval(robotHoldTimerRef.current);
       robotHoldTimerRef.current = null;
@@ -292,7 +286,29 @@ export function useDriveControls({
     void sendRobotDrive('S');
     setTimeout(() => void sendRobotDrive('S'), 120);
     setTimeout(() => void sendRobotDrive('S'), 300);
-  };
+  }, [robotHoldTimerRef, sendRobotDrive]);
+
+  // Keep the pilot open when switching back to portrait.
+  const prevLandscapeRef = useRef(false);
+  useEffect(() => {
+    if (isLandscape === prevLandscapeRef.current) return;
+    prevLandscapeRef.current = isLandscape;
+    if (robotHoldTimerRef.current) stopRobotDriveHold();
+    stopCamHold();
+    if (isLandscape && pairedWith && !camFullscreen) {
+      setCameraOn(true);
+      setCamFullscreen(true);
+    }
+  }, [
+    camFullscreen,
+    isLandscape,
+    pairedWith,
+    robotHoldTimerRef,
+    setCamFullscreen,
+    setCameraOn,
+    stopCamHold,
+    stopRobotDriveHold,
+  ]);
 
   return {
     sendRobotDrive,

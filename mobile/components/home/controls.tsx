@@ -215,12 +215,10 @@ export function SpeedSlider({
   pct,
   onPreview,
   onCommit,
-  compact,
 }: {
   pct: number;
   onPreview: (p: number) => void;
   onCommit: (p: number) => void;
-  compact?: boolean;
 }) {
   const widthRef = useRef(1);
   const startPctRef = useRef(pct);
@@ -256,14 +254,25 @@ export function SpeedSlider({
 
   return (
     <View
-      style={[styles.speedTrack, compact && styles.speedTrackCompact]}
-      onLayout={(e) => {
-        widthRef.current = Math.max(1, e.nativeEvent.layout.width);
+      accessibilityRole="adjustable"
+      accessibilityLabel="Vitesse du robot"
+      accessibilityValue={{ min: 0, max: 100, now: pct }}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      onAccessibilityAction={({ nativeEvent }) => {
+        const delta = nativeEvent.actionName === 'increment' ? 5 : -5;
+        onCommit(Math.max(0, Math.min(100, pct + delta)));
       }}
+      style={styles.speedTouchTarget}
       {...panRef.current.panHandlers}
     >
-      <View style={[styles.speedFill, { width: `${pct}%` }]} />
-      <View style={[styles.speedThumb, { left: `${pct}%` }]} />
+      <View
+        pointerEvents="none"
+        style={styles.speedTrack}
+        onLayout={(event) => { widthRef.current = Math.max(1, event.nativeEvent.layout.width); }}
+      >
+        <View style={[styles.speedFill, { width: `${pct}%` }]} />
+        <View style={[styles.speedThumb, { left: `${pct}%` }]} />
+      </View>
     </View>
   );
 }

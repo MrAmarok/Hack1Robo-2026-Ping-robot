@@ -14,7 +14,7 @@ export type SonarSnapshot = {
 type Props = {
   connected: boolean;
   snapshot: SonarSnapshot | null;
-  onClose: () => void;
+  onClose?: () => void;
 };
 
 const legend = [
@@ -35,15 +35,17 @@ export function SonarMapView({ connected, snapshot, onClose }: Props) {
       ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(image.data)}`
       : undefined;
 
+  const Container = onClose ? SafeAreaView : View;
+
   return (
-    <SafeAreaView style={styles.root}>
+    <Container style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
+        {onClose && <View style={styles.header}>
           <Text accessibilityRole="header" style={styles.title}>Live sonar map</Text>
           <Pressable accessibilityRole="button" onPress={onClose} style={styles.close}>
             <Text style={styles.closeLabel}>Close</Text>
           </Pressable>
-        </View>
+        </View>}
 
         <View style={[styles.canvas, { height: Math.max(200, Math.min(height * 0.55, 540)) }]}>
           {uri ? (
@@ -85,7 +87,7 @@ export function SonarMapView({ connected, snapshot, onClose }: Props) {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </Container>
   );
 }
 
