@@ -4,7 +4,7 @@ Client headless qui connecte un Raspberry Pi 3 à ton app **Ping**. Le robot
 s'appaire avec le même **code** que ton contact, lit sa position d'un **module
 GPS** réel, et peut **initier** ou **accepter** une demande « Se rejoindre ».
 
-Il parle exactement le même protocole socket.io que [`server/server.js`](../server/server.js).
+Il parle exactement le même protocole socket.io que le serveur Python ([`server/`](../server/README.md)).
 
 ---
 

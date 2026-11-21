@@ -55,3 +55,9 @@ GoogleService-Info.plist
 
 # Binaires telecharges
 *.exe
+
+# Serveur Python
+server/.venv/
+__pycache__/
+.pytest_cache/
+server/push-tokens.json
