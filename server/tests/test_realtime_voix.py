@@ -14,9 +14,17 @@ from app.core import sio as sio_mod
 from app.services import realtime_voix as rv
 
 ENV_NETTOYES = [
-    "OPENAI_API_KEY", "REALTIME_MODEL", "REALTIME_VOICE", "REALTIME_IDLE_MS", "REALTIME_VAD",
-    "REALTIME_VAD_SEUIL", "REALTIME_VAD_ARDEUR", "REALTIME_VEILLE", "REALTIME_MOT_REVEIL",
-    "REALTIME_VEILLE_MS", "REALTIME_MOT_REVEIL_LISIBLE",
+    "OPENAI_API_KEY",
+    "REALTIME_MODEL",
+    "REALTIME_VOICE",
+    "REALTIME_IDLE_MS",
+    "REALTIME_VAD",
+    "REALTIME_VAD_SEUIL",
+    "REALTIME_VAD_ARDEUR",
+    "REALTIME_VEILLE",
+    "REALTIME_MOT_REVEIL",
+    "REALTIME_VEILLE_MS",
+    "REALTIME_MOT_REVEIL_LISIBLE",
 ]
 
 
@@ -109,7 +117,13 @@ def banc(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     b = Banc()
     vb = types.ModuleType("app.services.voice_brain")
-    vb.TOOLS = [{"name": "piloter", "description": "Fait rouler.", "input_schema": {"type": "object", "properties": {}}}]
+    vb.TOOLS = [
+        {
+            "name": "piloter",
+            "description": "Fait rouler.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
     vb.SYSTEM_PROMPT = "PROMPT"
     vb.run_tool = b.run_tool
     monkeypatch.setitem(sys.modules, "app.services.voice_brain", vb)
@@ -134,7 +148,9 @@ async def propre():
     await asyncio.sleep(0)
 
 
-async def demarrer(banc: Banc, code: str = "C1", sid: str = "sid1") -> tuple[rv.SessionVocale, FakeConn]:
+async def demarrer(
+    banc: Banc, code: str = "C1", sid: str = "sid1"
+) -> tuple[rv.SessionVocale, FakeConn]:
     avant = len(banc.conns)
     await rv._rt_start(sid, {"code": code})
     await attendre(lambda: len(banc.conns) > avant and banc.conns[-1].envoyes)
@@ -182,7 +198,10 @@ def test_url_modele_et_detection(monkeypatch):
     monkeypatch.setenv("REALTIME_MODEL", "modele a/b")
     assert rv._url() == "wss://api.openai.com/v1/realtime?model=modele%20a%2Fb"
     assert rv._detection_tour() == {
-        "type": "server_vad", "threshold": 0.7, "prefix_padding_ms": 300, "silence_duration_ms": 700,
+        "type": "server_vad",
+        "threshold": 0.7,
+        "prefix_padding_ms": 300,
+        "silence_duration_ms": 700,
     }
     monkeypatch.setenv("REALTIME_VAD_SEUIL", "0.9")
     assert rv._detection_tour()["threshold"] == 0.9
@@ -199,14 +218,27 @@ def test_constructeur_options(monkeypatch, capsys):
     assert s.veille is True and s.eveille is False and s.annoncer is True
     assert s.format_audio == {"type": "audio/pcm", "rate": 24000}
     assert s.etiquette == "RT" and s.consignes == "" and s.outils_en_plus == []
-    assert 'code=C9 en veille, dites "Salut Solana" pour parler.' in capsys.readouterr().out
-    s = rv.SessionVocale(code="C9", veille=False, annoncer=False, etiquette="TEL", format_audio={"type": "audio/pcmu"})
+    assert (
+        'code=C9 en veille, dites "Salut Solana" pour parler.'
+        in capsys.readouterr().out
+    )
+    s = rv.SessionVocale(
+        code="C9",
+        veille=False,
+        annoncer=False,
+        etiquette="TEL",
+        format_audio={"type": "audio/pcmu"},
+    )
     assert s.veille is False and s.eveille is True and s.annoncer is False
     assert s.format_audio == {"type": "audio/pcmu"}
     assert "en veille" not in capsys.readouterr().out
     monkeypatch.setenv("REALTIME_VEILLE", "FALSE")
     assert rv.SessionVocale(code="C9").veille is False
-    assert rv.SessionVocale(code="C9").etat_veille() == {"eveille": True, "veille": False, "phrase": "Salut Solana"}
+    assert rv.SessionVocale(code="C9").etat_veille() == {
+        "eveille": True,
+        "veille": False,
+        "phrase": "Salut Solana",
+    }
 
 
 @pytest.mark.asyncio
@@ -219,22 +251,39 @@ async def test_session_robot_avec_veille(banc, propre, capsys):
     assert upd["type"] == "session.update"
     sess = upd["session"]
     assert sess["type"] == "realtime"
-    assert sess["instructions"].startswith("PROMPT\n\nTu es maintenant en conversation VOCALE DIRECTE.")
+    assert sess["instructions"].startswith(
+        "PROMPT\n\nTu es maintenant en conversation VOCALE DIRECTE."
+    )
     assert sess["audio"]["input"]["format"] == {"type": "audio/pcm", "rate": 24000}
     assert sess["audio"]["input"]["turn_detection"] == {
-        "type": "server_vad", "threshold": 0.7, "prefix_padding_ms": 300,
-        "silence_duration_ms": 700, "create_response": False,
+        "type": "server_vad",
+        "threshold": 0.7,
+        "prefix_padding_ms": 300,
+        "silence_duration_ms": 700,
+        "create_response": False,
     }
-    assert sess["audio"]["input"]["transcription"] == {"model": "gpt-4o-mini-transcribe", "language": "fr"}
-    assert sess["audio"]["output"] == {"format": {"type": "audio/pcm", "rate": 24000}, "voice": "marin"}
-    assert sess["tools"] == [{
-        "type": "function", "name": "piloter", "description": "Fait rouler.",
-        "parameters": {"type": "object", "properties": {}},
-    }]
+    assert sess["audio"]["input"]["transcription"] == {
+        "model": "gpt-4o-mini-transcribe",
+        "language": "fr",
+    }
+    assert sess["audio"]["output"] == {
+        "format": {"type": "audio/pcm", "rate": 24000},
+        "voice": "marin",
+    }
+    assert sess["tools"] == [
+        {
+            "type": "function",
+            "name": "piloter",
+            "description": "Fait rouler.",
+            "parameters": {"type": "object", "properties": {}},
+        }
+    ]
     assert sess["tool_choice"] == "auto"
     await attendre(lambda: banc.evenements("rt_veille"))
     assert ("C1", "rt_etat", {"actif": True}) in banc.emis
-    assert banc.evenements("rt_veille") == [{"eveille": False, "veille": True, "phrase": "Salut Solana"}]
+    assert banc.evenements("rt_veille") == [
+        {"eveille": False, "veille": True, "phrase": "Salut Solana"}
+    ]
     assert s.prete
 
     pcm = bytes(range(256)) * 8
@@ -244,7 +293,12 @@ async def test_session_robot_avec_veille(banc, propre, capsys):
     ajouts = [m for m in conn.envoyes if m["type"] == "input_audio_buffer.append"]
     assert len(ajouts) == 1 and base64.b64decode(ajouts[0]["audio"]) == pcm
 
-    conn.pousser({"type": "response.output_audio.delta", "delta": base64.b64encode(b"\x01\x02\x03").decode()})
+    conn.pousser(
+        {
+            "type": "response.output_audio.delta",
+            "delta": base64.b64encode(b"\x01\x02\x03").decode(),
+        }
+    )
     await attendre(lambda: banc.evenements("rt_audio_out"))
     assert banc.evenements("rt_audio_out") == [{"pcm": b"\x01\x02\x03"}]
 
@@ -256,28 +310,53 @@ async def test_session_robot_avec_veille(banc, propre, capsys):
     await attendre(lambda: {"finReponse": True} in banc.evenements("rt_etat"))
     assert s.reponses == 1
 
-    conn.pousser({"type": "conversation.item.input_audio_transcription.completed", "transcript": "il pleut"})
+    conn.pousser(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "il pleut",
+        }
+    )
     await attendre(lambda: banc.evenements("rt_entendu"))
     await asyncio.sleep(0.02)
     assert banc.evenements("rt_entendu") == [{"texte": "il pleut"}]
     assert "response.create" not in conn.types()
     assert "code=C1 en veille, pas de reponse." in capsys.readouterr().out
 
-    conn.pousser({"type": "conversation.item.input_audio_transcription.completed", "transcript": "Salut, Solâna !"})
+    conn.pousser(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "Salut, Solâna !",
+        }
+    )
     await attendre(lambda: "response.create" in conn.types())
     assert s.eveille is True
-    assert banc.evenements("rt_veille")[-1] == {"eveille": True, "veille": True, "phrase": "Salut Solana"}
+    assert banc.evenements("rt_veille")[-1] == {
+        "eveille": True,
+        "veille": True,
+        "phrase": "Salut Solana",
+    }
     assert s.veille_timer is not None
 
     conn.pousser({"type": "response.created"})
-    conn.pousser({"type": "conversation.item.input_audio_transcription.completed", "transcript": "et toi ?"})
+    conn.pousser(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "et toi ?",
+        }
+    )
     await attendre(lambda: len(banc.evenements("rt_entendu")) == 3)
     await asyncio.sleep(0.02)
     assert conn.types().count("response.create") == 1
     assert s.reponse_en_cours is True
 
     await rv._rt_veille_etat("app1", {"code": "C1"})
-    assert banc.emis_sid == [("app1", "rt_veille", {"eveille": True, "veille": True, "phrase": "Salut Solana"})]
+    assert banc.emis_sid == [
+        (
+            "app1",
+            "rt_veille",
+            {"eveille": True, "veille": True, "phrase": "Salut Solana"},
+        )
+    ]
 
     await rv._rt_interrompre("sid1", {"code": "C1"})
     await attendre(lambda: "input_audio_buffer.clear" in conn.types())
@@ -292,31 +371,59 @@ async def test_session_robot_avec_veille(banc, propre, capsys):
     banc.retour_outil = [
         {"type": "text", "text": "Image en direct"},
         {"type": "text", "text": "de la camera"},
-        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "QUJD"}},
+        {
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/png", "data": "QUJD"},
+        },
         {"type": "image", "source": {"type": "base64"}},
     ]
     avant = len(conn.envoyes)
-    conn.pousser({"type": "response.done", "response": {"output": [
-        {"type": "message"},
-        {"type": "function_call", "name": "regarder", "call_id": "call_1", "arguments": '{"zoom": 2}'},
-    ]}})
+    conn.pousser(
+        {
+            "type": "response.done",
+            "response": {
+                "output": [
+                    {"type": "message"},
+                    {
+                        "type": "function_call",
+                        "name": "regarder",
+                        "call_id": "call_1",
+                        "arguments": '{"zoom": 2}',
+                    },
+                ]
+            },
+        }
+    )
     await attendre(lambda: conn.types()[avant:].count("response.create") == 1)
     nom, entree, ctx = banc.outils_appeles[-1]
     assert nom == "regarder" and entree == {"zoom": 2}
     assert set(ctx) == {"code", "frame", "log"}
     assert ctx["code"] == "C1" and ctx["frame"] == b"\xff\xd8jpeg"
     assert conn.envoyes[avant:] == [
-        {"type": "conversation.item.create", "item": {
-            "type": "function_call_output", "call_id": "call_1",
-            "output": '{"resultat":"Image en direct de la camera"}',
-        }},
-        {"type": "conversation.item.create", "item": {
-            "type": "message", "role": "user",
-            "content": [{"type": "input_image", "image_url": "data:image/png;base64,QUJD"}],
-        }},
+        {
+            "type": "conversation.item.create",
+            "item": {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": '{"resultat":"Image en direct de la camera"}',
+            },
+        },
+        {
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {"type": "input_image", "image_url": "data:image/png;base64,QUJD"}
+                ],
+            },
+        },
         {"type": "response.create"},
     ]
-    assert "code=C1 outil regarder -> Image en direct de la camera [+1 image]" in capsys.readouterr().out
+    assert (
+        "code=C1 outil regarder -> Image en direct de la camera [+1 image]"
+        in capsys.readouterr().out
+    )
 
     avant = len(conn.envoyes)
     conn.pousser({"type": "response.done", "response": {"output": []}})
@@ -328,7 +435,12 @@ async def test_session_robot_avec_veille(banc, propre, capsys):
     await attendre(lambda: conn.state is State.CLOSED)
     await attendre(lambda: banc.evenements("rt_etat").count({"actif": False}) >= 2)
     assert "C1" not in rv._sessions
-    assert s.ws is None and s.prete is False and s.veille_timer is None and s._minuteur is None
+    assert (
+        s.ws is None
+        and s.prete is False
+        and s.veille_timer is None
+        and s._minuteur is None
+    )
     out = capsys.readouterr().out
     assert "[RT] code=C1 arret demande par le robot (rt_stop)." in out
     assert "[RT] code=C1 session fermee (code=1000" in out and "1 reponse(s))." in out
@@ -342,12 +454,30 @@ async def test_outil_en_erreur_et_arguments_invalides(banc, propre, capsys):
         raise RuntimeError("moteur bloque")
 
     sys.modules["app.services.voice_brain"].run_tool = casse
-    conn.pousser({"type": "response.done", "response": {"output": [
-        {"type": "function_call", "name": "piloter", "call_id": "c2", "arguments": "{pas du json"},
-    ]}})
+    conn.pousser(
+        {
+            "type": "response.done",
+            "response": {
+                "output": [
+                    {
+                        "type": "function_call",
+                        "name": "piloter",
+                        "call_id": "c2",
+                        "arguments": "{pas du json",
+                    },
+                ]
+            },
+        }
+    )
     await attendre(lambda: "response.create" in conn.types())
-    sortie = [m for m in conn.envoyes if m.get("item", {}).get("type") == "function_call_output"][0]
-    assert json.loads(sortie["item"]["output"]) == {"resultat": "Erreur outil : moteur bloque"}
+    sortie = [
+        m
+        for m in conn.envoyes
+        if m.get("item", {}).get("type") == "function_call_output"
+    ][0]
+    assert json.loads(sortie["item"]["output"]) == {
+        "resultat": "Erreur outil : moteur bloque"
+    }
 
 
 @pytest.mark.asyncio
@@ -357,9 +487,21 @@ async def test_session_sans_veille(banc, propre, monkeypatch, capsys):
     td = conn.envoyes[0]["session"]["audio"]["input"]["turn_detection"]
     assert "create_response" not in td
     await attendre(lambda: banc.evenements("rt_veille"))
-    assert banc.evenements("rt_veille") == [{"eveille": True, "veille": False, "phrase": "Salut Solana"}]
-    conn.pousser({"type": "conversation.item.input_audio_transcription.completed", "transcript": "bonjour"})
-    conn.pousser({"type": "conversation.item.input_audio_transcription.completed", "transcript": ""})
+    assert banc.evenements("rt_veille") == [
+        {"eveille": True, "veille": False, "phrase": "Salut Solana"}
+    ]
+    conn.pousser(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "bonjour",
+        }
+    )
+    conn.pousser(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "",
+        }
+    )
     await attendre(lambda: banc.evenements("rt_entendu"))
     await asyncio.sleep(0.02)
     assert "response.create" not in conn.types()
@@ -370,9 +512,17 @@ async def test_session_sans_veille(banc, propre, monkeypatch, capsys):
 async def test_transcription_vide_eveille_demande_reponse(banc, propre, capsys):
     s, conn = await demarrer(banc)
     s.eveille = True
-    conn.pousser({"type": "conversation.item.input_audio_transcription.completed", "transcript": ""})
+    conn.pousser(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "",
+        }
+    )
     await attendre(lambda: "response.create" in conn.types())
-    assert "tour sans transcription -> reponse demandee quand meme." in capsys.readouterr().out
+    assert (
+        "tour sans transcription -> reponse demandee quand meme."
+        in capsys.readouterr().out
+    )
     s.eveille = False
     conn.pousser({"type": "conversation.item.input_audio_transcription.completed"})
     await asyncio.sleep(0.03)
@@ -383,7 +533,12 @@ async def test_transcription_vide_eveille_demande_reponse(banc, propre, capsys):
 async def test_retour_en_veille_apres_silence(banc, propre, monkeypatch, capsys):
     monkeypatch.setenv("REALTIME_VEILLE_MS", "40")
     s, conn = await demarrer(banc)
-    conn.pousser({"type": "conversation.item.input_audio_transcription.completed", "transcript": "solana"})
+    conn.pousser(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "solana",
+        }
+    )
     await attendre(lambda: s.eveille)
     await attendre(lambda: not s.eveille)
     assert banc.evenements("rt_veille")[-1]["eveille"] is False
@@ -395,8 +550,15 @@ async def test_sans_cle(banc, propre, monkeypatch, capsys):
     monkeypatch.delenv("OPENAI_API_KEY")
     await rv._rt_start("sid1", {"code": "C1"})
     assert banc.conns == []
-    assert ("C1", "rt_etat", {"actif": False, "erreur": "cle OpenAI absente"}) in banc.emis
-    assert "[RT] OPENAI_API_KEY absente -> mode temps reel indisponible." in capsys.readouterr().out
+    assert (
+        "C1",
+        "rt_etat",
+        {"actif": False, "erreur": "cle OpenAI absente"},
+    ) in banc.emis
+    assert (
+        "[RT] OPENAI_API_KEY absente -> mode temps reel indisponible."
+        in capsys.readouterr().out
+    )
     await rv._rt_start("sid1", {})
     await rv._rt_start("sid1", None)
     assert len(banc.emis) == 1
@@ -444,7 +606,10 @@ async def test_deconnexion_ferme_si_salon_vide(banc, propre, monkeypatch, capsys
     await rv._deconnexion("sid1")
     assert s.ws is None
     await attendre(lambda: conn.state is State.CLOSED)
-    assert "[RT] code=C1 plus personne dans la room -> fermeture." in capsys.readouterr().out
+    assert (
+        "[RT] code=C1 plus personne dans la room -> fermeture."
+        in capsys.readouterr().out
+    )
 
 
 @pytest.mark.asyncio
@@ -465,5 +630,8 @@ async def test_fermer_pendant_la_connexion(banc, propre, capsys):
     await rv._rt_stop("sid1", {"code": "C1"})
     porte.set()
     await attendre(lambda: conns and conns[0].state is State.CLOSED)
-    await attendre(lambda: "WebSocket was closed before the connection was established" in capsys.readouterr().out)
+    await attendre(
+        lambda: "WebSocket was closed before the connection was established"
+        in capsys.readouterr().out
+    )
     assert conns[0].envoyes == []

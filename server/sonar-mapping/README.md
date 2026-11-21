@@ -9,6 +9,40 @@ uv run --locked --script server/sonar-mapping/map_sonar.py server/sonar-mapping/
 
 The PNG uses one pixel per cell. Black is likely occupied, white is likely free, and gray is unknown. The PNG stores the cell size and world coordinates of the lower-left corner as metadata. The command also prints them. Image rows increase downward, while world Y increases upward.
 
+## Watch a replay in Ping
+
+Run each command in a separate terminal from the repository root. Use the same snapshot path in the server and replay commands. Choose a fresh path for each demo.
+
+On NixOS, prefix the `uv` commands with `UV_PYTHON="$(command -v python3)"` to use the system Python.
+
+1. Start the server with a pairing room and a snapshot file.
+
+   ```sh
+   SONAR_MAP_ROOM=sonar-demo SONAR_SNAPSHOT_FILE=/tmp/ping-sonar-demo.json \
+     PORT=3002 uv run --project server ping-server
+   ```
+
+2. Start Expo and press `w` to open the browser.
+
+   ```sh
+   cd mobile
+   EXPO_PUBLIC_PING_SERVER_ORIGIN=http://localhost:3002 npm start
+   ```
+
+   For a phone on the same network, substitute the server computer's LAN address for `localhost`. The phone build must allow an HTTP connection to the development server. With the deployed Ping server, leave the Expo override unset and configure the snapshot file and room on that server.
+
+3. Enter a nickname and the shared code `sonar-demo`, click **S’APPARIER**, and open **Live sonar map**.
+4. Start the replay.
+
+   ```sh
+   uv run --locked --script server/sonar-mapping/map_sonar.py \
+     server/sonar-mapping/samples/simulated-room.csv /tmp/ping-sonar-demo.json --live
+   ```
+
+The replay adds 12 readings per frame with a one-second pause between frames. The map keeps the same extent throughout and stays visible when the replay ends. Use a CSV recorded at known poses to replay actual measurements.
+
+Add `--format svg` to replay with SVG snapshots. An external mapper can also publish either format by atomically replacing the configured JSON file. Include `image` with `format` set to `svg` or `png` and `data` set to raw SVG markup or base64 PNG bytes. Include `readingCount`, `totalReadings`, `resolutionM`, and `updatedAt` in Unix milliseconds. Use SVGs with a `viewBox` and inline shapes.
+
 ## Sample data
 
 - [bench-wall.csv](samples/bench-wall.csv) uses the eight mean HC-SR04 distances published by the [Barkhausen Institut](https://www.barkhauseninstitut.org/research/lab-1/our-blog/distance-sensor-research). The source reports perpendicular measurements against a flat target. The CSV reconstructs the sensor positions from the reference distances by putting that target at X = 0 and the sensor on the negative X axis. This is a range replay along one line.

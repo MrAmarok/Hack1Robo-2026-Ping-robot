@@ -36,12 +36,16 @@ def horodatage() -> str:
 
 async def etat(code: str, **extra) -> None:
     s = en_cours.get(code)
-    await emit_room(code, "robot_record_status", {
-        "actif": bool(s),
-        "fichier": os.path.basename(s.fichier) if s else None,
-        "secondes": round((now_ms() - s.debut) / 1000) if s else 0,
-        **extra,
-    })
+    await emit_room(
+        code,
+        "robot_record_status",
+        {
+            "actif": bool(s),
+            "fichier": os.path.basename(s.fichier) if s else None,
+            "secondes": round((now_ms() - s.debut) / 1000) if s else 0,
+            **extra,
+        },
+    )
 
 
 async def _lire_erreurs(code: str, s: _Session) -> None:
@@ -80,14 +84,18 @@ async def _attendre_fin(code: str, s: _Session) -> None:
         if s.err:
             raison = f"Flux illisible : {s.err[:140]}"
         elif secondes < 3:
-            raison = (f"Enregistrement trop court ({secondes}s) : il faut quelques "
-                      "secondes avant la premiere image complete.")
+            raison = (
+                f"Enregistrement trop court ({secondes}s) : il faut quelques "
+                "secondes avant la premiere image complete."
+            )
         else:
             raison = "Aucun flux : allume la camera avant d enregistrer."
         log(f"[REC] code={code} echec : {raison}")
         await etat(code, erreur=raison)
     else:
-        await etat(code, termine=os.path.basename(s.fichier), mo=round(taille / 1048576, 1))
+        await etat(
+            code, termine=os.path.basename(s.fichier), mo=round(taille / 1048576, 1)
+        )
 
 
 async def demarrer(code: str) -> None:
@@ -97,12 +105,19 @@ async def demarrer(code: str) -> None:
     try:
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg",
-            "-loglevel", "error",
-            "-rtsp_transport", "tcp",
-            "-i", f"{RTSP}/robot-{code}",
-            "-c", "copy",
-            "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
-            "-f", "mp4", fichier,
+            "-loglevel",
+            "error",
+            "-rtsp_transport",
+            "tcp",
+            "-i",
+            f"{RTSP}/robot-{code}",
+            "-c",
+            "copy",
+            "-movflags",
+            "+frag_keyframe+empty_moov+default_base_moof",
+            "-f",
+            "mp4",
+            fichier,
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
@@ -171,4 +186,6 @@ def attach_enregistrement() -> None:
         Path(DOSSIER).mkdir(parents=True, exist_ok=True)
     except OSError as e:
         log(f"[REC] dossier {DOSSIER} inaccessible : {e}")
-    log(f"[REC] Enregistrement video pret (dossier {DOSSIER}, max {round(DUREE_MAX_MS / 60000)} min).")
+    log(
+        f"[REC] Enregistrement video pret (dossier {DOSSIER}, max {round(DUREE_MAX_MS / 60000)} min)."
+    )

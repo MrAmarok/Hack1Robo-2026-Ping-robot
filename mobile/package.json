@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "reset-project": "node ./scripts/reset-project.js"
+    "reset-project": "node ./scripts/reset-project.js",
+    "postinstall": "patch-package --error-on-fail"
   },
   "dependencies": {
     "@config-plugins/react-native-webrtc": "12.0.0",
@@ -45,6 +46,7 @@
     "expo-updates": "~0.28.18",
     "expo-web-browser": "~14.2.0",
     "express": "^5.1.0",
+    "patch-package": "^8.0.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.6",
@@ -55,6 +57,7 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
+    "react-native-svg": "15.11.2",
     "react-native-web": "~0.20.0",
     "react-native-webrtc": "^124.0.6",
     "react-native-webview": "13.13.5",

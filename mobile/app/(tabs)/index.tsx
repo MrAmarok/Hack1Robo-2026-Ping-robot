@@ -41,6 +41,8 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { loadNativeMaps } from '@/components/nativeMaps';
+import { SonarMapView, type SonarSnapshot } from '@/components/SonarMapView';
 
 // ========================
 // Constantes & config
@@ -57,8 +59,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // a une autre application du VPS. Le robot, lui, garde son acces direct.
 //
 // Au passage, le flux de surveillance ne circule plus en clair.
-const ORIGINE_SERVEUR = 'https://api.ping-app.org';
-const SOCKET_URL = `${ORIGINE_SERVEUR}/ping`;
+const LOCAL_SERVER_ORIGIN = process.env.EXPO_PUBLIC_PING_SERVER_ORIGIN?.replace(/\/+$/, '');
+const ORIGINE_SERVEUR = LOCAL_SERVER_ORIGIN || 'https://api.ping-app.org';
+const SERVER_PREFIX = LOCAL_SERVER_ORIGIN ? '' : '/ping';
+const SOCKET_URL = `${ORIGINE_SERVEUR}${SERVER_PREFIX}`;
+const SOCKET_PATH = `${SERVER_PREFIX}/socket.io/`;
 // Video WebRTC : le robot pousse un H.264 vers MediaMTX (sur le VPS), l'app le
 // lit en WHEP via le proxy /rtc du serveur (seul port HTTP ouvert). Le module
 // natif peut manquer dans un ancien build installe -> require() protege, et
@@ -469,6 +474,10 @@ async function rangerVideoDansGalerie(nom: string, mo?: number) {
 let raisonJetonAbsent: string | null = null;
 
 async function ensureExpoPushToken(interactive = false): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    raisonJetonAbsent = 'Expo push notifications are unavailable on web';
+    return null;
+  }
   raisonJetonAbsent = null;
   try {
     // On redemande TOUJOURS un jeton frais : Android le remplace de lui-meme
@@ -571,6 +580,8 @@ export default function App() {
   const [pairCode, setPairCode] = useState('');
   const [customMessage, setCustomMessage] = useState('');
   const [socketOnline, setSocketOnline] = useState(false);
+  const [sonarOpen, setSonarOpen] = useState(false);
+  const [sonarSnapshot, setSonarSnapshot] = useState<SonarSnapshot | null>(null);
   const [pairedWith, setPairedWith] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [robotCommandStatus, setRobotCommandStatus] = useState('');
@@ -847,11 +858,8 @@ export default function App() {
   }, [listening, rtcAudioLive]);
 
   // Carte lazy
-  const [mapLibLoaded, setMapLibLoaded] = useState(false);
-  const MapRef = useRef<{ MapView?: any; Marker?: any; Polyline?: any } | null>(
-    null
-  );
-  const robotMapRef = useRef<any>(null);
+  const [maps, setMaps] = useState<ReturnType<typeof loadNativeMaps>>(null);
+  const robotMapRef = useRef<import('react-native-maps').default>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -968,7 +976,7 @@ export default function App() {
     // comme un espace de noms et se connecterait a la mauvaise destination.
     // Le prefixe se declare dans `path`.
     const s = io(ORIGINE_SERVEUR, {
-      path: '/ping/socket.io/',
+      path: SOCKET_PATH,
       transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -977,7 +985,16 @@ export default function App() {
       timeout: 10000,
     });
     socketRef.current = s;
-    pushRobotLog(`socket init -> ${ORIGINE_SERVEUR} (chemin /ping/socket.io/)`);
+    pushRobotLog(`socket init -> ${ORIGINE_SERVEUR} (chemin ${SOCKET_PATH})`);
+
+    s.on('sonar_map_snapshot', (snapshot: SonarSnapshot) => {
+      if (snapshot.code !== pairCodeRef.current.trim()) return;
+      setSonarSnapshot((current) =>
+        current?.code === snapshot.code && current.updatedAt >= snapshot.updatedAt
+          ? current
+          : snapshot
+      );
+    });
 
     const savePairLocal = async (p: { code: string; pseudo: string }) =>
       AsyncStorage.setItem('pair', JSON.stringify(p));
@@ -994,12 +1011,6 @@ export default function App() {
       if (!effectivePseudo || !effectiveCode) return;
       pushRobotLog(`pair emit pseudo=${effectivePseudo} code=${effectiveCode}`);
 
-      // Pas de garde sur canNotifyRef ici : il vaut false tant que la
-      // verification asynchrone des permissions n'a pas fini, et la socket se
-      // connecte souvent avant. ensureExpoPushToken verifie lui-meme les
-      // permissions et rend null si elles manquent — le garde ne servait qu'a
-      // rater l'enregistrement une fois sur deux.
-      const token = await ensureExpoPushToken(false)
       const since = await getLastSeen();
       s.emit('pair', {
         pseudo: effectivePseudo,
@@ -1024,7 +1035,9 @@ export default function App() {
         plateforme: Platform.OS,
         version: Platform.Version,
       });
+      s.emit('sync', { code: effectiveCode, since });
 
+      const token = await ensureExpoPushToken(false);
       if (!token) {
         // Dire POURQUOI, et au serveur : c'est le seul endroit que je peux lire.
         s.emit('app_diag', {
@@ -1055,8 +1068,6 @@ export default function App() {
           console.log('Erreur /register-token', e);
         }
       }
-      s.emit('sync', { code: effectiveCode, since });
-
       const last = await AsyncStorage.getItem('lastBgLocation');
       if (last) {
         try {
@@ -1494,18 +1505,7 @@ export default function App() {
       await shareMyLocationOnce();
       await setLastSeenNow();
 
-      // Charger la lib de maps après accept (lazy & safe)
-      try {
-        const maps = require('react-native-maps');
-        MapRef.current = {
-          MapView: maps.default,
-          Marker: maps.Marker,
-          Polyline: maps.Polyline,
-        };
-        setMapLibLoaded(true);
-      } catch {
-        setMapLibLoaded(false);
-      }
+      setMaps(loadNativeMaps());
     });
 
     s.on('meet_declined', async (payload: { by?: string }) => {
@@ -2431,19 +2431,8 @@ export default function App() {
   // Charger la lib de carte des qu'on est appaire (pour la carte robot,
   // sans attendre un "Se rejoindre").
   useEffect(() => {
-    if (!pairedWith || mapLibLoaded) return;
-    try {
-      const maps = require('react-native-maps');
-      MapRef.current = {
-        MapView: maps.default,
-        Marker: maps.Marker,
-        Polyline: maps.Polyline,
-      };
-      setMapLibLoaded(true);
-    } catch {
-      setMapLibLoaded(false);
-    }
-  }, [pairedWith, mapLibLoaded]);
+    if (pairedWith && !maps) setMaps(loadNativeMaps());
+  }, [pairedWith, maps]);
 
   // Suivre le robot : recentrer la carte a chaque nouvelle position.
   const robotLat = robotStatus?.coords?.latitude;
@@ -2911,13 +2900,15 @@ export default function App() {
       'pair',
       JSON.stringify({ code: pairCode.trim(), pseudo: pseudo.trim() })
     );
-    const token = await ensureExpoPushToken(false);
     const since = await getLastSeen();
     socketRef.current.emit('pair', {
       pseudo: pseudo.trim(),
       code: pairCode.trim(),
       lastSeen: since,
     });
+    socketRef.current.emit('sync', { code: pairCode.trim(), since });
+
+    const token = await ensureExpoPushToken(false);
     if (token) {
       try {
         const sid = socketRef.current.id;
@@ -2930,7 +2921,6 @@ export default function App() {
         }
       } catch {}
     }
-    socketRef.current.emit('sync', { code: pairCode.trim(), since });
   };
 
   const onUnpair = async () => {
@@ -2939,6 +2929,7 @@ export default function App() {
     await AsyncStorage.multiRemove(['pair', 'pseudo', 'pairCode', 'lastSeen']);
     setPseudo('');
     setPairCode('');
+    setSonarSnapshot(null);
     setPairedWith('');
     setMeetRequestFrom(null);
     setMeetStatus(null);
@@ -3273,10 +3264,6 @@ export default function App() {
       ? Math.max(0, Math.min(100, Math.round((1 - remainingDist / destStartDist) * 100)))
       : 0;
 
-  const MapView = MapRef.current?.MapView;
-  const Marker = MapRef.current?.Marker;
-  const Polyline = MapRef.current?.Polyline;
-
   // ========================
   // UI (aucun Fragment stylé)
   // ========================
@@ -3313,6 +3300,7 @@ export default function App() {
           style={styles.input}
         />
 
+        {Platform.OS !== 'web' && (
         <View style={{ backgroundColor: '#0B1016', borderRadius: 12, padding: 12, marginTop: 8 }}>
           <Text style={{ color: '#E8FFF8', fontWeight: '700', marginBottom: 6 }}>
             Notifications (optionnel)
@@ -3403,6 +3391,7 @@ ${tk.slice(0, 32)}…`);
             </TouchableOpacity>
           )}
         </View>
+        )}
 
             <PrimaryButton label="S’APPARIER" onPress={onPair} />
           </>
@@ -3419,6 +3408,14 @@ ${tk.slice(0, 32)}…`);
             {pairedWith ? `Connecté à ${pairedWith}` : "En attente de l'autre..."}
           </Text>
         </View>
+
+        <PrimaryButton
+          label="Live sonar map"
+          onPress={() => {
+            setSonarOpen(true);
+            socketRef.current?.emit('sonar_map_request');
+          }}
+        />
 
         {/* === Mode de surveillance === */}
         {/* Premier element de la page : c'est la question a laquelle on repond
@@ -3682,14 +3679,14 @@ ${tk.slice(0, 32)}…`);
               )}
             </View>
 
-            {!robotCoord ? (
+            {Platform.OS === 'web' ? (
+              <Text style={{ color: '#7C9C93' }}>Open the mobile app to view the map.</Text>
+            ) : !robotCoord ? (
               <Text style={{ color: '#7C9C93' }}>
                 En attente d&apos;un fix GPS du robot…
               </Text>
-            ) : !mapLibLoaded ? (
-              <Text style={{ color: '#7C9C93' }}>Chargement de la carte…</Text>
-            ) : MapView ? (
-              <MapView
+            ) : maps ? (
+              <maps.default
                 ref={robotMapRef}
                 style={[styles.map, { height: mapH }]}
                 initialRegion={robotRegion}
@@ -3708,14 +3705,14 @@ ${tk.slice(0, 32)}…`);
                   setDestStartDist(robotCoord ? distanceMeters(robotCoord, c) : null);
                 }}
               >
-                <Marker
+                <maps.Marker
                   coordinate={robotCoord}
                   title="Robot"
                   description={formatCoord(robotCoord)}
                   pinColor="#00E5A0"
                 />
                 {myCoord && (
-                  <Marker
+                  <maps.Marker
                     coordinate={myCoord}
                     title="Moi"
                     description="Ta position"
@@ -3723,7 +3720,7 @@ ${tk.slice(0, 32)}…`);
                   />
                 )}
                 {destination && (
-                  <Marker
+                  <maps.Marker
                     coordinate={{
                       latitude: destination.latitude,
                       longitude: destination.longitude,
@@ -3733,14 +3730,14 @@ ${tk.slice(0, 32)}…`);
                     pinColor="#FFB020"
                   />
                 )}
-                {Polyline && routeCoords.length > 1 && (
-                  <Polyline
+                {routeCoords.length > 1 && (
+                  <maps.Polyline
                     coordinates={routeCoords}
                     strokeWidth={4}
                     strokeColor="#FFB020"
                   />
                 )}
-              </MapView>
+              </maps.default>
             ) : (
               <Text style={{ color: '#7C9C93' }}>Carte indisponible.</Text>
             )}
@@ -3755,6 +3752,13 @@ ${tk.slice(0, 32)}…`);
           <PrimaryButton label="SE DÉCONNECTER" onPress={onUnpair} />
         )}
       </View>
+
+      <SonarMapView
+        visible={sonarOpen}
+        connected={socketOnline}
+        snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
+        onClose={() => setSonarOpen(false)}
+      />
 
       {/* ======== TUTORIEL (MODAL) ======== */}
       {/* === Camera plein ecran + commandes de pilotage === */}
@@ -3788,7 +3792,7 @@ ${tk.slice(0, 32)}…`);
           )}
 
           {/* Barre du haut : fermer / audio / temoin robot / vitesse */}
-          <View style={styles.fsTopRow} pointerEvents="box-none">
+          <View style={styles.fsTopRow}>
             <View style={styles.fsSpeedGroup}>
               <TouchableOpacity
                 style={styles.camPadSpeedBtn}
@@ -4002,7 +4006,7 @@ ${tk.slice(0, 32)}…`);
               ordres d'un spectateur — ceci evite surtout de lui presenter des
               boutons qui ne feraient rien. */}
           {rtActif && (
-            <View style={styles.fsVeilleBandeau} pointerEvents="none">
+            <View style={styles.fsVeilleBandeau}>
               <Text style={styles.fsVeilleTexte}>
                 {rtEveille
                   ? 'SOLANA ECOUTE'
@@ -4011,14 +4015,14 @@ ${tk.slice(0, 32)}…`);
             </View>
           )}
           {!estPilote && (
-            <View style={styles.fsRoleBandeau} pointerEvents="none">
+            <View style={styles.fsRoleBandeau}>
               <Text style={styles.fsRoleTexte}>
                 {role === 'attente' ? 'EN ATTENTE D ACCEPTATION' : 'SPECTATEUR, CAMERA SEULE'}
               </Text>
             </View>
           )}
           {estPilote && (
-          <View style={styles.fsBottomRow} pointerEvents="box-none">
+          <View style={styles.fsBottomRow}>
             {/* Pouce gauche : la direction. */}
             <View style={styles.camPadGroupRow}>
               <TouchableOpacity
@@ -4304,7 +4308,7 @@ function CamPanTiltPad({
   // la barre du haut, qui ne croise aucune commande de pilotage.
   if (fullscreen) {
     return (
-      <View style={styles.camPtBarFs} pointerEvents="box-none">
+      <View style={styles.camPtBarFs}>
         <Text style={styles.camPtTitle}>🎥</Text>
         {arrow('◀', +1, 0)}
         {arrow('▲', 0, +1)}
@@ -4318,7 +4322,7 @@ function CamPanTiltPad({
   }
 
   return (
-    <View style={styles.camPtPad} pointerEvents="box-none">
+    <View style={styles.camPtPad}>
       <Text style={styles.camPtTitle}>🎥</Text>
       {arrow('▲', 0, +1)}
       <View style={styles.camPtRow}>
@@ -4604,11 +4608,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
     marginVertical: 8,
-    shadowColor: HUD.ACCENT,
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
+    ...Platform.select({
+      web: { boxShadow: `0 0 12px ${HUD.ACCENT}80` },
+      default: {
+        shadowColor: HUD.ACCENT,
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 6,
+      },
+    }),
   },
   primaryBtnText: {
     color: HUD.FOND,
@@ -4765,6 +4774,7 @@ const styles = StyleSheet.create({
   appelActif: { color: HUD.ACCENT, fontWeight: '700' },
   camPadGroupRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   fsVeilleBandeau: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: 96,
     alignSelf: 'center',
@@ -4777,6 +4787,7 @@ const styles = StyleSheet.create({
   },
   fsVeilleTexte: { color: HUD.ACCENT, fontWeight: '900', fontSize: 10.5, letterSpacing: 1.4 },
   fsRoleBandeau: {
+    pointerEvents: 'none',
     position: 'absolute',
     bottom: 18,
     alignSelf: 'center',
@@ -5199,6 +5210,7 @@ const styles = StyleSheet.create({
   fsImage: { ...StyleSheet.absoluteFillObject },
   fsWait: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   fsTopRow: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     top: 46,
     left: 14,
@@ -5213,6 +5225,7 @@ const styles = StyleSheet.create({
   fsAudioOn: { backgroundColor: 'rgba(255,59,92,0.7)', borderColor: 'rgba(255,90,110,0.6)' },
   fsZoomText: { color: '#E8FFF8', fontWeight: '900', fontSize: 12 },
   fsBottomRow: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     bottom: 28,
     left: 14,
@@ -5306,6 +5319,7 @@ const styles = StyleSheet.create({
   camPadSymbol: { color: '#E8FFF8', fontWeight: '900', fontSize: 22, lineHeight: 24 },
   // Pad pan-tilt camera (surimpression en haut a gauche de l'image)
   camPtPad: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     top: 8,
     left: 8,
@@ -5316,6 +5330,7 @@ const styles = StyleSheet.create({
   // Horizontale et non plus en colonne : en paysage la colonne descendait
   // jusque sur le joystick de pilotage.
   camPtBarFs: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     // 130 : laisse la place a une rangee du haut sur DEUX lignes. Le
     // chevauchement observe le 24/09 venait de cette marge trop courte.

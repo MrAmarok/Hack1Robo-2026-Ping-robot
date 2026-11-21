@@ -25,7 +25,9 @@ async def envoyer_telegram(texte: str) -> bool:
     jeton = env("TELEGRAM_TOKEN")
     salon = env("TELEGRAM_CHAT_ID")
     if not jeton or not salon:
-        log("[TELEGRAM] non configure (TELEGRAM_TOKEN / TELEGRAM_CHAT_ID absents du .env).")
+        log(
+            "[TELEGRAM] non configure (TELEGRAM_TOKEN / TELEGRAM_CHAT_ID absents du .env)."
+        )
         return False
     try:
         async with httpx.AsyncClient(timeout=8) as client:
@@ -38,7 +40,9 @@ async def envoyer_telegram(texte: str) -> bool:
         except ValueError:
             j = {}
         if r.status_code >= 400 or j.get("ok") is False:
-            log(f"[TELEGRAM] refus (HTTP {r.status_code}) : {j.get('description') or 'sans detail'}")
+            log(
+                f"[TELEGRAM] refus (HTTP {r.status_code}) : {j.get('description') or 'sans detail'}"
+            )
             return False
         log("[TELEGRAM] alerte envoyee.")
         return True
@@ -101,7 +105,11 @@ def _enregistrer_photo(code: str, octets: bytes, ts: int) -> str | None:
     Path(DOSSIER_ALERTES, fichier).write_bytes(octets)
     Path(DOSSIER_ALERTES, f"{code}.jpg").write_bytes(octets)
     prefixe = f"{code}-"
-    vieilles = sorted(f for f in os.listdir(DOSSIER_ALERTES) if f.startswith(prefixe) and f.endswith(".jpg"))
+    vieilles = sorted(
+        f
+        for f in os.listdir(DOSSIER_ALERTES)
+        if f.startswith(prefixe) and f.endswith(".jpg")
+    )
     for f in vieilles[: max(0, len(vieilles) - ALERTES_GARDEES)]:
         try:
             os.unlink(os.path.join(DOSSIER_ALERTES, f))
@@ -126,14 +134,19 @@ async def _robot_alerte(sid, data):
     code = str(code)
     code_fichier_ok = bool(CODE_FICHIER_OK.match(code))
     if not code_fichier_ok:
-        log("[ALERTE] code de salon impropre a un nom de fichier : photo non enregistree.")
+        log(
+            "[ALERTE] code de salon impropre a un nom de fichier : photo non enregistree."
+        )
     ts_alerte = now_ms()
     fichier_photo = None
     octets = None
     if photo:
         try:
-            octets = (photo if isinstance(photo, (bytes, bytearray))
-                      else base64.b64decode(str(photo) + "=" * (-len(str(photo)) % 4)))
+            octets = (
+                photo
+                if isinstance(photo, (bytes, bytearray))
+                else base64.b64decode(str(photo) + "=" * (-len(str(photo)) % 4))
+            )
         except (binascii.Error, ValueError, TypeError) as e:
             log("[ALERTE] photo illisible :", e)
             octets = None
@@ -143,8 +156,17 @@ async def _robot_alerte(sid, data):
         except OSError as e:
             log("[ALERTE] photo non enregistree :", e)
 
-    await emit_room(code, "robot_alerte", {"type": type_, "niveau": p.get("niveau"), "photo": bool(photo)}, skip_sid=sid)
-    log_room_event(code, "robot_alerte", {"type": type_, "niveau": p.get("niveau"), "capteurs": capteurs})
+    await emit_room(
+        code,
+        "robot_alerte",
+        {"type": type_, "niveau": p.get("niveau"), "photo": bool(photo)},
+        skip_sid=sid,
+    )
+    log_room_event(
+        code,
+        "robot_alerte",
+        {"type": type_, "niveau": p.get("niveau"), "capteurs": capteurs},
+    )
 
     try:
         heure = time.strftime("%H:%M:%S")
@@ -153,7 +175,9 @@ async def _robot_alerte(sid, data):
             try:
                 from app.services import voice_brain
 
-                vu = await asyncio.wait_for(voice_brain.decrire_scene(bytes(octets)), timeout=6)
+                vu = await asyncio.wait_for(
+                    voice_brain.decrire_scene(bytes(octets)), timeout=6
+                )
                 if vu:
                     log(f"[ALERTE] vu ({vu.get('categorie')}) : {vu.get('phrase')}")
             except asyncio.TimeoutError:
@@ -162,9 +186,11 @@ async def _robot_alerte(sid, data):
                 log("[ALERTE] analyse impossible :", e)
 
         t = str(type_)
-        capteur = ("Presence detectee" if t == "presence"
-                   else "Mouvement detecte" if t == "mouvement"
-                   else "Bruit detecte")
+        capteur = (
+            "Presence detectee"
+            if t == "presence"
+            else "Mouvement detecte" if t == "mouvement" else "Bruit detecte"
+        )
 
         categorie_vue = vu.get("categorie") if vu else None
         if categorie_vue == "personne":
@@ -186,9 +212,13 @@ async def _robot_alerte(sid, data):
             tache(_appel())
 
         corps = (vu and vu.get("phrase")) or (
-            "Le robot detecte quelqu un. Ouvre la camera." if t == "presence"
-            else "Le robot a vu quelque chose bouger. Ouvre la camera." if t == "mouvement"
-            else "Le robot a entendu quelque chose. Ouvre la camera pour voir."
+            "Le robot detecte quelqu un. Ouvre la camera."
+            if t == "presence"
+            else (
+                "Le robot a vu quelque chose bouger. Ouvre la camera."
+                if t == "mouvement"
+                else "Le robot a entendu quelque chose. Ouvre la camera pour voir."
+            )
         )
         await envoyer_telegram(
             f"{titre} a {heure}.\n{capteur}. {corps}\n"
@@ -211,7 +241,9 @@ async def _robot_alerte(sid, data):
         sauver_historique()
 
         if not notif_autorisee(code, categorie):
-            log(f"[ALERTE] {categorie} : notification retenue (cadence), alerte conservee.")
+            log(
+                f"[ALERTE] {categorie} : notification retenue (cadence), alerte conservee."
+            )
             return
         entree["notifiee"] = True
         sauver_historique()
@@ -222,7 +254,11 @@ async def _robot_alerte(sid, data):
             title=titre,
             body=corps,
             data={"type": "alerte", "kind": str(type_ or "bruit")},
-            image=(f"{PUBLIC_URL}/alerte-photo?code={quote(code, safe='')}&t={now_ms()}" if photo else None),
+            image=(
+                f"{PUBLIC_URL}/alerte-photo?code={quote(code, safe='')}&t={now_ms()}"
+                if photo
+                else None
+            ),
         )
     except Exception as e:
         log("[ALERTE] notification non envoyee :", e)

@@ -30,7 +30,7 @@ flowchart LR
     Media -->|"Vidéo WebRTC"| App
 ```
 
-- **Téléphone.** L’écran principal contient le joystick, la carte, le lecteur vidéo et les historiques. Expo Router organise les écrans. Des modules React Native natifs gèrent notamment la carte et WebRTC. [Écran principal](app/%28tabs%29/index.tsx)
+- **Téléphone.** L’écran principal contient le joystick, la carte, le lecteur vidéo et les historiques. Expo Router organise les écrans. Des modules React Native natifs gèrent notamment la carte et WebRTC. [Écran principal](mobile/app/%28tabs%29/index.tsx)
 - **Serveur.** Le code de salon associe le téléphone et le robot. Le serveur attribue le rôle de pilote, relaie les commandes et diffuse les positions et états. FastAPI expose les routes HTTP de consultation des alertes et enregistrements. Le serveur garde les salons, rôles et files d’attente en mémoire. Il écrit notamment les jetons de notification et l’historique des alertes sur disque. [Serveur](server/README.md)
 - **Raspberry Pi.** Le programme embarqué lit le GPS, gère la caméra et le micro, calcule les corrections de cap et envoie les ordres de déplacement à l’Arduino. [Point d’entrée](robot/robot.js) · [Navigation](robot/navigation.js) · [Rondes](robot/ronde.js)
 - **Arduino.** Le firmware reçoit les ordres du Pi par liaison série et pilote le matériel. Le dépôt contient plusieurs firmwares correspondant à différents montages et essais. [Firmwares](robot/arduino)
@@ -38,6 +38,6 @@ flowchart LR
 ## Deux exemples de bout en bout
 
 1. **Pousser le joystick vers l’avant.** L’application émet l’événement `robot_drive`. Le serveur vérifie le rôle de pilote et relaie l’ordre au Raspberry Pi. Le Pi envoie la commande sur le port série de l’Arduino, puis renvoie un état à l’application via le serveur. [Relais côté serveur](server/app/websocket/robot.py#L46) · [Réception côté robot](robot/robot.js#L1462)
-2. **Ouvrir la caméra.** Le Pi publie la vidéo H.264 en RTSP vers MediaMTX. L’application lit ce flux en WebRTC avec l’aide du serveur pour négocier la connexion. Si WebRTC est indisponible, un flux de secours transmet des images JPEG successives. [Capture](robot/camera.js) · [Lecture](app/%28tabs%29/index.tsx#L2481)
+2. **Ouvrir la caméra.** Le Pi publie la vidéo H.264 en RTSP vers MediaMTX. L’application lit ce flux en WebRTC avec l’aide du serveur pour négocier la connexion. Si WebRTC est indisponible, un flux de secours transmet des images JPEG successives. [Capture](robot/camera.js) · [Lecture](mobile/app/%28tabs%29/index.tsx#L2481)
 
 Le [README du robot](robot/README.md) couvre la configuration du GPS, l’appairage et la liaison Arduino. Cette description s’appuie sur le code du dépôt. Le robot physique et les services déployés n’ont pas été testés.

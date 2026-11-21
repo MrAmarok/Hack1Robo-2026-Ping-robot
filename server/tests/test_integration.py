@@ -36,7 +36,9 @@ class Client:
                 if ev == event and (filtre is None or filtre(data)):
                     return data
             await asyncio.sleep(0.02)
-        raise AssertionError(f"'{event}' non recu ; recu : {[e for e, _ in self.recus]}")
+        raise AssertionError(
+            f"'{event}' non recu ; recu : {[e for e, _ in self.recus]}"
+        )
 
     def a_recu(self, event: str) -> bool:
         return any(ev == event for ev, _ in self.recus)
@@ -67,7 +69,9 @@ async def test_election_du_pilote_et_admission(serveur):
     assert demande["pseudo"] == "Zoe"
 
     await pilote.sio.emit("acces_reponse", {"id": demande["id"], "accepte": True})
-    assert (await invite.attendre("role_acces", filtre=lambda d: d["role"] == "spectateur"))
+    assert await invite.attendre(
+        "role_acces", filtre=lambda d: d["role"] == "spectateur"
+    )
     await invite.sio.emit("robot_drive", {"code": code, "cmd": "F"})
     assert (await invite.attendre("acces_refuse_commande"))["commande"] == "robot_drive"
 
@@ -91,7 +95,9 @@ async def test_pilotage_relaye_au_robot(serveur):
     await asyncio.sleep(0.3)
     assert [d["id"] for e, d in robot.recus if e == "robot_drive"] == ["c1"]
 
-    await robot.sio.emit("robot_drive_status", {"code": code, "cmd": "M100,-40", "ok": True, "id": "c1"})
+    await robot.sio.emit(
+        "robot_drive_status", {"code": code, "cmd": "M100,-40", "ok": True, "id": "c1"}
+    )
     st = await pilote.attendre("robot_drive_status")
     assert st["ok"] is True and st["by"] == "Robot"
     for c in (pilote, robot):
@@ -102,11 +108,21 @@ async def test_robot_status_et_cam_move(serveur):
     code = nouveau_code()
     pilote, robot = await salon(serveur, code)
 
-    await robot.sio.emit("robot_status", {"code": code, "status": {"fix": True, "obstacleCm": 40}})
+    await robot.sio.emit(
+        "robot_status", {"code": code, "status": {"fix": True, "obstacleCm": 40}}
+    )
     st = await pilote.attendre("robot_status")
-    assert st["fix"] is True and st["obstacleCm"] == 40 and st["by"] == "Robot" and st["ts"] > 0
+    assert (
+        st["fix"] is True
+        and st["obstacleCm"] == 40
+        and st["by"] == "Robot"
+        and st["ts"] > 0
+    )
 
-    await pilote.sio.emit("robot_cam_move", {"code": code, "pan": 250, "tilt": "45.4", "view": "rear", "id": "k"})
+    await pilote.sio.emit(
+        "robot_cam_move",
+        {"code": code, "pan": 250, "tilt": "45.4", "view": "rear", "id": "k"},
+    )
     mv = await robot.attendre("robot_cam_move")
     assert mv == {"center": False, "id": "k", "pan": 180, "tilt": 45, "view": "rear"}
     for c in (pilote, robot):
@@ -118,7 +134,9 @@ async def test_image_binaire_et_accuse(serveur):
     pilote, robot = await salon(serveur, code)
     image = b"\xff\xd8\xff" + bytes(range(256)) * 10
 
-    accuse = await robot.sio.call("robot_frame", {"code": code, "jpeg": image}, timeout=3)
+    accuse = await robot.sio.call(
+        "robot_frame", {"code": code, "jpeg": image}, timeout=3
+    )
     assert accuse is None
     recu = await pilote.attendre("robot_frame")
     assert recu["jpeg"] == image
@@ -167,17 +185,32 @@ async def test_routes_http(serveur):
     pilote, robot = await salon(serveur, code)
     async with httpx.AsyncClient(base_url=serveur) as http:
         assert (await http.get("/")).text == "OK"
-        r = await http.post("/robot-drive", json={"code": code, "cmd": "s", "from": "test"})
+        r = await http.post(
+            "/robot-drive", json={"code": code, "cmd": "s", "from": "test"}
+        )
         assert r.status_code == 200 and r.json()["recipients"] == 2
         assert (await robot.attendre("robot_drive"))["by"] == "test"
-        assert (await http.post("/robot-drive", json={"code": code, "cmd": "??"})).status_code == 400
-        assert (await http.get("/alertes", params={"code": code})).json() == {"alertes": []}
+        assert (
+            await http.post("/robot-drive", json={"code": code, "cmd": "??"})
+        ).status_code == 400
+        assert (await http.get("/alertes", params={"code": code})).json() == {
+            "alertes": []
+        }
         assert (await http.get("/alertes")).status_code == 400
-        assert (await http.get("/alerte-photo", params={"code": code})).status_code == 404
-        assert (await http.get("/enregistrements", params={"code": code})).json() == {"videos": []}
-        assert (await http.get("/enregistrement", params={"f": "../x.mp4"})).status_code == 400
+        assert (
+            await http.get("/alerte-photo", params={"code": code})
+        ).status_code == 404
+        assert (await http.get("/enregistrements", params={"code": code})).json() == {
+            "videos": []
+        }
+        assert (
+            await http.get("/enregistrement", params={"f": "../x.mp4"})
+        ).status_code == 400
         assert (await http.post("/register-token", json={})).status_code == 400
-        r = await http.post("/register-token", json={"token": "ExponentPushToken[abc]", "code": code, "pseudo": "Andy"})
+        r = await http.post(
+            "/register-token",
+            json={"token": "ExponentPushToken[abc]", "code": code, "pseudo": "Andy"},
+        )
         assert r.json() == {"message": "Token enregistré"}
         r = await http.get("/rtc/robot-x/whep")
         assert r.status_code == 502
@@ -192,7 +225,9 @@ async def test_alerte_refusee_si_pas_robot(serveur):
     await pilote.sio.emit("robot_alerte", {"code": code, "type": "bruit"})
     await asyncio.sleep(0.3)
     assert not robot.a_recu("robot_alerte")
-    await robot.sio.emit("robot_alerte", {"code": code, "type": "mouvement", "niveau": 3})
+    await robot.sio.emit(
+        "robot_alerte", {"code": code, "type": "mouvement", "niveau": 3}
+    )
     al = await pilote.attendre("robot_alerte")
     assert al == {"type": "mouvement", "niveau": 3, "photo": False}
     async with httpx.AsyncClient(base_url=serveur) as http:

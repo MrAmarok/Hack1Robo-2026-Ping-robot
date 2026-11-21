@@ -199,7 +199,14 @@ TOOLS: list[dict] = [
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["apprendre_debut", "apprendre_fin", "demarrer", "arreter", "oublier", "etat"],
+                    "enum": [
+                        "apprendre_debut",
+                        "apprendre_fin",
+                        "demarrer",
+                        "arreter",
+                        "oublier",
+                        "etat",
+                    ],
                     "description": "L'operation a effectuer sur la ronde.",
                 },
             },
@@ -265,9 +272,9 @@ TOOLS: list[dict] = [
         "name": "mode_surveillance",
         "description": (
             "Arme ou desarme la surveillance de la maison. A utiliser quand la personne ANNONCE "
-            "qu'elle part (\"je m'en vais\", \"j'y vais\", \"je pars\", \"a ce soir\") ou qu'elle rentre "
-            "(\"je suis rentre\", \"me revoila\"), et quand elle demande explicitement le mode absent "
-            "ou le mode normal. N'appelle PAS cet outil sur une simple question (\"tu es en mode quoi ?\") "
+            'qu\'elle part ("je m\'en vais", "j\'y vais", "je pars", "a ce soir") ou qu\'elle rentre '
+            '("je suis rentre", "me revoila"), et quand elle demande explicitement le mode absent '
+            'ou le mode normal. N\'appelle PAS cet outil sur une simple question ("tu es en mode quoi ?") '
             "ni si la personne parle du depart de quelqu'un d'autre."
         ),
         "input_schema": {
@@ -369,7 +376,11 @@ def _octets(x: Any) -> bytes:
         return x.encode("utf-8")
     if isinstance(x, list):
         return bytes(int(b) & 0xFF for b in x)
-    if isinstance(x, dict) and x.get("type") == "Buffer" and isinstance(x.get("data"), list):
+    if (
+        isinstance(x, dict)
+        and x.get("type") == "Buffer"
+        and isinstance(x.get("data"), list)
+    ):
         return bytes(int(b) & 0xFF for b in x["data"])
     raise TypeError("donnee binaire attendue")
 
@@ -399,7 +410,9 @@ def _textes(blocs: Any) -> list[str]:
     out = []
     for b in blocs or []:
         if _type_bloc(b) == "text":
-            out.append(b.get("text", "") if isinstance(b, dict) else getattr(b, "text", ""))
+            out.append(
+                b.get("text", "") if isinstance(b, dict) else getattr(b, "text", "")
+            )
     return out
 
 
@@ -416,8 +429,18 @@ def normalize(s: Any) -> str:
 
 
 NOMBRES = {
-    "un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5,
-    "six": 6, "sept": 7, "huit": 8, "neuf": 9, "dix": 10, "demi": 0.5,
+    "un": 1,
+    "une": 1,
+    "deux": 2,
+    "trois": 3,
+    "quatre": 4,
+    "cinq": 5,
+    "six": 6,
+    "sept": 7,
+    "huit": 8,
+    "neuf": 9,
+    "dix": 10,
+    "demi": 0.5,
 }
 
 
@@ -428,7 +451,10 @@ def duree_de(txt: str) -> float:
     for mot, val in NOMBRES.items():
         if re.search(rf"\b{mot}\b\s*(?:secondes?)", txt):
             return min(5, val)
-    if re.search(r"\b(un peu|un petit peu|legerement|doucement|un chouia|un tout petit peu)\b", txt):
+    if re.search(
+        r"\b(un peu|un petit peu|legerement|doucement|un chouia|un tout petit peu)\b",
+        txt,
+    ):
         return 0.6
     if re.search(r"\b(beaucoup|longtemps|bien|a fond|loin|tout droit)\b", txt):
         return 3
@@ -436,10 +462,34 @@ def duree_de(txt: str) -> float:
 
 
 _MOUVEMENTS = [
-    (re.compile(r"\b(avance|avancer|avances|avancez|tout droit|en avant|va devant|vas y|roule|demarre)\b"), "avancer", "J avance"),
-    (re.compile(r"\b(recule|reculer|recules|reculez|en arriere|va derriere|recul)\b"), "reculer", "Je recule"),
-    (re.compile(r"\b(a droite|vers la droite|tourne droite|sur la droite|tourne a droite|pivote a droite)\b"), "droite", "Je tourne a droite"),
-    (re.compile(r"\b(a gauche|vers la gauche|tourne gauche|sur la gauche|tourne a gauche|pivote a gauche)\b"), "gauche", "Je tourne a gauche"),
+    (
+        re.compile(
+            r"\b(avance|avancer|avances|avancez|tout droit|en avant|va devant|vas y|roule|demarre)\b"
+        ),
+        "avancer",
+        "J avance",
+    ),
+    (
+        re.compile(
+            r"\b(recule|reculer|recules|reculez|en arriere|va derriere|recul)\b"
+        ),
+        "reculer",
+        "Je recule",
+    ),
+    (
+        re.compile(
+            r"\b(a droite|vers la droite|tourne droite|sur la droite|tourne a droite|pivote a droite)\b"
+        ),
+        "droite",
+        "Je tourne a droite",
+    ),
+    (
+        re.compile(
+            r"\b(a gauche|vers la gauche|tourne gauche|sur la gauche|tourne a gauche|pivote a gauche)\b"
+        ),
+        "gauche",
+        "Je tourne a gauche",
+    ),
 ]
 
 
@@ -448,33 +498,50 @@ def commande_locale(texte: str) -> dict | None:
     if not t:
         return None
 
-    if (re.search(r"\b(mode absent|active la surveillance|arme la surveillance|surveille la maison)\b", t)
-            or re.search(r"\b(je m en vais|je men vais|je pars|j y vais|je quitte la maison)\b", t)):
+    if re.search(
+        r"\b(mode absent|active la surveillance|arme la surveillance|surveille la maison)\b",
+        t,
+    ) or re.search(
+        r"\b(je m en vais|je men vais|je pars|j y vais|je quitte la maison)\b", t
+    ):
         return {"tool": "mode_surveillance", "input": {"absent": True}, "reply": None}
-    if (re.search(r"\b(mode normal|(arrete|coupe|desactive|desarme) la surveillance)\b", t)
-            or re.search(r"\b(je suis rentre|je suis rentree|je suis revenu|je suis revenue|me revoila)\b", t)):
+    if re.search(
+        r"\b(mode normal|(arrete|coupe|desactive|desarme) la surveillance)\b", t
+    ) or re.search(
+        r"\b(je suis rentre|je suis rentree|je suis revenu|je suis revenue|me revoila)\b",
+        t,
+    ):
         return {"tool": "mode_surveillance", "input": {"absent": False}, "reply": None}
 
     if re.search(r"\b(stop|stoppe|arrete|arretes|arreter|halte|stoppez)\b", t):
         return {"tool": "piloter", "input": {"action": "stop"}, "reply": "Stop."}
 
-    if re.search(r"\b(suis moi|suit moi|suis moi stp|viens avec moi|accompagne moi|suis moi steuplait)\b", t):
+    if re.search(
+        r"\b(suis moi|suit moi|suis moi stp|viens avec moi|accompagne moi|suis moi steuplait)\b",
+        t,
+    ):
         return {"tool": "suivre_personne", "input": {}, "reply": None}
     if re.search(r"\b(arrete de me suivre|ne me suis plus|reste la|reste ici)\b", t):
         return {"tool": "arreter_suivi", "input": {}, "reply": None}
 
-    if re.search(r"\b(ou es tu|ou est tu|ou tu es|ta position|ton etat|ta batterie)\b", t):
+    if re.search(
+        r"\b(ou es tu|ou est tu|ou tu es|ta position|ton etat|ta batterie)\b", t
+    ):
         return {"tool": "etat_robot", "input": {}, "reply": None}
 
-    est_question = "?" in str(texte) or bool(re.search(
-        r"^(qu|que|quoi|qui|quel|quelle|quels|quelles|ou|comment|pourquoi|combien|est ce que|peux tu"
-        r"|sais tu|vois tu|y a t il|dis moi|decris|raconte|explique|cherche|trouve|regarde)\b",
-        t,
-    ))
+    est_question = "?" in str(texte) or bool(
+        re.search(
+            r"^(qu|que|quoi|qui|quel|quelle|quels|quelles|ou|comment|pourquoi|combien|est ce que|peux tu"
+            r"|sais tu|vois tu|y a t il|dis moi|decris|raconte|explique|cherche|trouve|regarde)\b",
+            t,
+        )
+    )
     if est_question:
         return None
 
-    if re.search(r"\b(demi tour|fais demi tour|retourne toi|fais un demi tour|volte face)\b", t):
+    if re.search(
+        r"\b(demi tour|fais demi tour|retourne toi|fais un demi tour|volte face)\b", t
+    ):
         return {
             "tool": "piloter",
             "input": {"action": "droite", "duree_secondes": 3},
@@ -536,13 +603,30 @@ async def transcribe_deepgram(wav_path: str, key: str) -> str:
 
 async def transcribe_whisper(wav_path: str) -> str:
     args = [
-        "-m", WHISPER_MODEL, "-f", wav_path, "-l", "fr", "-nt", "-np", "--no-prints",
-        "-t", "4", "-bo", "1", "-bs", "1", "-nf", "-sns",
-        "--prompt", WHISPER_PROMPT,
+        "-m",
+        WHISPER_MODEL,
+        "-f",
+        wav_path,
+        "-l",
+        "fr",
+        "-nt",
+        "-np",
+        "--no-prints",
+        "-t",
+        "4",
+        "-bo",
+        "1",
+        "-bs",
+        "1",
+        "-nf",
+        "-sns",
+        "--prompt",
+        WHISPER_PROMPT,
     ]
     try:
         proc = await asyncio.create_subprocess_exec(
-            WHISPER_BIN, *args,
+            WHISPER_BIN,
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -580,11 +664,18 @@ async def transcribe(wav_path: str, log: Callable[..., None] = log) -> str:
 
 
 async def geocode(adresse: str) -> dict | None:
-    url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + _encode_uri_component(adresse)
+    url = (
+        "https://nominatim.openstreetmap.org/search?format=json&limit=1&q="
+        + _encode_uri_component(adresse)
+    )
 
     async def _requete():
         async with httpx.AsyncClient() as c:
-            res = await c.get(url, headers={"User-Agent": "ping-robot/1.0 (assistant vocal)"}, timeout=8)
+            res = await c.get(
+                url,
+                headers={"User-Agent": "ping-robot/1.0 (assistant vocal)"},
+                timeout=8,
+            )
             return res.json()
 
     lst = await asyncio.wait_for(_requete(), 8)
@@ -594,7 +685,9 @@ async def geocode(adresse: str) -> dict | None:
     return {
         "latitude": _js_number(_champ(premier, "lat")),
         "longitude": _js_number(_champ(premier, "lon")),
-        "label": ",".join(_texte(_champ(premier, "display_name"), adresse).split(",")[:3]),
+        "label": ",".join(
+            _texte(_champ(premier, "display_name"), adresse).split(",")[:3]
+        ),
     }
 
 
@@ -627,14 +720,19 @@ async def grab_frame(code: str, timeout_ms: float = 8000) -> bytes | None:
     timeout_s = timeout_ms / 1000
     loop = asyncio.get_running_loop()
     fin = loop.time() + timeout_s
-    demandes = {asyncio.ensure_future(call(s, "robot_grab_frame", {}, timeout=timeout_s)) for s in sids}
+    demandes = {
+        asyncio.ensure_future(call(s, "robot_grab_frame", {}, timeout=timeout_s))
+        for s in sids
+    }
     try:
         en_cours = set(demandes)
         while en_cours:
             reste = fin - loop.time()
             if reste <= 0:
                 break
-            faits, en_cours = await asyncio.wait(en_cours, timeout=reste, return_when=asyncio.FIRST_COMPLETED)
+            faits, en_cours = await asyncio.wait(
+                en_cours, timeout=reste, return_when=asyncio.FIRST_COMPLETED
+            )
             for t in faits:
                 if t.cancelled() or t.exception() is not None:
                     continue
@@ -654,7 +752,10 @@ async def grab_frame(code: str, timeout_ms: float = 8000) -> bytes | None:
 
 
 def _bloc_image(frame: Any) -> dict:
-    return {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": _b64(frame)}}
+    return {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/jpeg", "data": _b64(frame)},
+    }
 
 
 async def decrire_scene(image: bytes, log: Callable[..., None] = log) -> dict | None:
@@ -679,20 +780,22 @@ async def decrire_scene(image: bytes, log: Callable[..., None] = log) -> dict | 
                 '"animal" ou "rien" et decris ce que tu vois reellement. Se tromper en annoncant '
                 "un intrus qui n'existe pas rend l'alerte inutile."
             ),
-            messages=[{
-                "role": "user",
-                "content": [
-                    _bloc_image(image),
-                    {"type": "text", "text": "Que vois-tu ?"},
-                ],
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        _bloc_image(image),
+                        {"type": "text", "text": "Que vois-tu ?"},
+                    ],
+                }
+            ],
         )
         t = " ".join(_textes(res.content)).strip()
         if not t:
             return None
 
         try:
-            brut = t[t.find("{"): t.rfind("}") + 1]
+            brut = t[t.find("{") : t.rfind("}") + 1]
             j = json.loads(brut)
             cat = _champ(j, "categorie")
             cat = cat if cat in ("personne", "animal", "rien") else "rien"
@@ -732,13 +835,15 @@ async def localiser_objet(client, frame: bytes, objet: str) -> dict:
             "taille = part de la hauteur de l image occupee par l objet (0.05 tres loin, 0.8 tout pres). "
             'Si l objet n est pas visible : {"vu": false, "x": 0, "taille": 0}.'
         ),
-        messages=[{
-            "role": "user",
-            "content": [
-                _bloc_image(frame),
-                {"type": "text", "text": f"Ou se trouve : {objet} ?"},
-            ],
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    _bloc_image(frame),
+                    {"type": "text", "text": f"Ou se trouve : {objet} ?"},
+                ],
+            }
+        ],
     )
     txt = " ".join(_textes(res.content))
     try:
@@ -754,16 +859,26 @@ async def localiser_objet(client, frame: bytes, objet: str) -> dict:
     }
 
 
-async def bouger(code: str, cmd: str, secs: float, annule: Callable[[], bool] | None = None) -> None:
+async def bouger(
+    code: str, cmd: str, secs: float, annule: Callable[[], bool] | None = None
+) -> None:
     until = now_ms() + secs * 1000
     n = 0
     while now_ms() < until:
         if annule and annule():
             break
-        await emit_room(code, "robot_drive", {"cmd": cmd, "by": "solana", "id": f"servo-{now_ms()}-{n}"})
+        await emit_room(
+            code,
+            "robot_drive",
+            {"cmd": cmd, "by": "solana", "id": f"servo-{now_ms()}-{n}"},
+        )
         n += 1
         await _attendre_ms(min(400, max(0, until - now_ms())))
-    await emit_room(code, "robot_drive", {"cmd": "S", "by": "solana", "id": f"servo-stop-{now_ms()}"})
+    await emit_room(
+        code,
+        "robot_drive",
+        {"cmd": "S", "by": "solana", "id": f"servo-stop-{now_ms()}"},
+    )
     await _attendre_ms(400)
 
 
@@ -785,7 +900,9 @@ async def analyser_voie(client, frame: bytes, contexte: Any) -> dict | None:
                 "de ma destination, sauf si ce cote est bloque."
             )
         else:
-            situation = f"Je roule vers une destination a {d} metres. La voie est-elle libre ?"
+            situation = (
+                f"Je roule vers une destination a {d} metres. La voie est-elle libre ?"
+            )
 
     res = await client.messages.create(
         model=VISION_MODEL,
@@ -800,13 +917,15 @@ async def analyser_voie(client, frame: bytes, contexte: Any) -> dict | None:
             "Compte comme obstacles : murs, meubles, vehicules, personnes, poteaux, marches, trous, "
             "bordures hautes. Ne compte PAS le sol plat, l'herbe rase, le gravier."
         ),
-        messages=[{
-            "role": "user",
-            "content": [
-                _bloc_image(frame),
-                {"type": "text", "text": situation},
-            ],
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    _bloc_image(frame),
+                    {"type": "text", "text": situation},
+                ],
+            }
+        ],
     )
     txt = " ".join(_textes(res.content))
     try:
@@ -835,12 +954,22 @@ async def arreter_suivi(code: str) -> bool:
     s["actif"] = False
     if s.get("ticker"):
         s["ticker"].cancel()
-    await emit_room(code, "robot_drive", {"cmd": "S", "by": "solana", "id": f"suivi-stop-{now_ms()}"})
-    await emit_room(code, "robot_drive", {"cmd": "V255", "by": "solana", "id": f"suivi-fast-{now_ms()}"})
+    await emit_room(
+        code,
+        "robot_drive",
+        {"cmd": "S", "by": "solana", "id": f"suivi-stop-{now_ms()}"},
+    )
+    await emit_room(
+        code,
+        "robot_drive",
+        {"cmd": "V255", "by": "solana", "id": f"suivi-fast-{now_ms()}"},
+    )
     return True
 
 
-async def suivre_personne(client, code: str, cible: str, log: Callable[..., None] = log) -> str:
+async def suivre_personne(
+    client, code: str, cible: str, log: Callable[..., None] = log
+) -> str:
     await arreter_suivi(code)
     session: dict = {"actif": True}
     suivis[code] = session
@@ -858,12 +987,20 @@ async def suivre_personne(client, code: str, cible: str, log: Callable[..., None
             await asyncio.sleep(max(0.0, prochain - loop.time()))
             if not session["actif"]:
                 continue
-            await emit_room(code, "robot_drive", {"cmd": ordre, "by": "solana", "id": f"suivi-{now_ms()}"})
+            await emit_room(
+                code,
+                "robot_drive",
+                {"cmd": ordre, "by": "solana", "id": f"suivi-{now_ms()}"},
+            )
 
     ticker = tache(_ticker())
     session["ticker"] = ticker
 
-    await emit_room(code, "robot_drive", {"cmd": "V170", "by": "solana", "id": f"suivi-slow-{now_ms()}"})
+    await emit_room(
+        code,
+        "robot_drive",
+        {"cmd": "V170", "by": "solana", "id": f"suivi-slow-{now_ms()}"},
+    )
 
     LOIN = 0.22
     PRES = 0.75
@@ -891,7 +1028,9 @@ async def suivre_personne(client, code: str, cible: str, log: Callable[..., None
                 c = await localiser_objet(client, frame, cible)
                 if not session["actif"]:
                     break
-                log(f"[SUIVI] vu={_js_str(c['vu'])} x={c['x']:.2f} taille={c['taille']:.2f}")
+                log(
+                    f"[SUIVI] vu={_js_str(c['vu'])} x={c['x']:.2f} taille={c['taille']:.2f}"
+                )
 
                 if not c["vu"]:
                     perdus += 1
@@ -923,21 +1062,35 @@ async def suivre_personne(client, code: str, cible: str, log: Callable[..., None
                 await dire("J'arrete de te suivre.")
             session["actif"] = False
             ticker.cancel()
-            await emit_room(code, "robot_drive", {"cmd": "S", "by": "solana", "id": f"suivi-fin-{now_ms()}"})
-            await emit_room(code, "robot_drive", {"cmd": "V255", "by": "solana", "id": f"suivi-fin2-{now_ms()}"})
+            await emit_room(
+                code,
+                "robot_drive",
+                {"cmd": "S", "by": "solana", "id": f"suivi-fin-{now_ms()}"},
+            )
+            await emit_room(
+                code,
+                "robot_drive",
+                {"cmd": "V255", "by": "solana", "id": f"suivi-fin2-{now_ms()}"},
+            )
             log("[SUIVI] termine")
         except Exception as e:
             log("[SUIVI] erreur", _msg(e))
             session["actif"] = False
             ticker.cancel()
-            await emit_room(code, "robot_drive", {"cmd": "S", "by": "solana", "id": f"suivi-err-{now_ms()}"})
+            await emit_room(
+                code,
+                "robot_drive",
+                {"cmd": "S", "by": "solana", "id": f"suivi-err-{now_ms()}"},
+            )
 
     tache(_boucle())
 
     return "Je te suis. Dis stop quand tu veux que j arrete."
 
 
-async def aller_vers_objet(client, code: str, objet: str, log: Callable[..., None] = log) -> str:
+async def aller_vers_objet(
+    client, code: str, objet: str, log: Callable[..., None] = log
+) -> str:
     session = {"annule": False}
     servos[code] = session
 
@@ -951,13 +1104,21 @@ async def aller_vers_objet(client, code: str, objet: str, log: Callable[..., Non
     dernier_sens = 0
     gain = 1.0
 
-    await emit_room(code, "robot_drive", {"cmd": "V150", "by": "solana", "id": f"servo-slow-{now_ms()}"})
+    await emit_room(
+        code,
+        "robot_drive",
+        {"cmd": "V150", "by": "solana", "id": f"servo-slow-{now_ms()}"},
+    )
     await _attendre_ms(250)
 
     async def finir(msg: str) -> str:
         if servos.get(code) is session:
             del servos[code]
-        await emit_room(code, "robot_drive", {"cmd": "V255", "by": "solana", "id": f"servo-fast-{now_ms()}"})
+        await emit_room(
+            code,
+            "robot_drive",
+            {"cmd": "V255", "by": "solana", "id": f"servo-fast-{now_ms()}"},
+        )
         return msg
 
     step = 1
@@ -965,10 +1126,14 @@ async def aller_vers_objet(client, code: str, objet: str, log: Callable[..., Non
         if session["annule"]:
             return await finir("Arret demande, je me suis arrete en chemin.")
         if now_ms() - debut > SERVO_MAX_MS:
-            return await finir(f"Temps ecoule apres {step - 1} manoeuvres, je me suis arrete en chemin.")
+            return await finir(
+                f"Temps ecoule apres {step - 1} manoeuvres, je me suis arrete en chemin."
+            )
         frame = await grab_frame(code)
         if not frame:
-            return await finir("Je n'arrive pas a prendre d'image, je ne peux pas m'y rendre.")
+            return await finir(
+                "Je n'arrive pas a prendre d'image, je ne peux pas m'y rendre."
+            )
 
         cible = await localiser_objet(client, frame, objet)
         log(
@@ -986,7 +1151,9 @@ async def aller_vers_objet(client, code: str, objet: str, log: Callable[..., Non
         perdus = 0
 
         if cible["taille"] >= ARRIVE:
-            return await finir(f"J'y suis, {objet} est juste devant moi ({step} manoeuvres).")
+            return await finir(
+                f"J'y suis, {objet} est juste devant moi ({step} manoeuvres)."
+            )
 
         if abs(cible["x"]) > CENTRE_TOL:
             sens = 1 if cible["x"] > 0 else -1
@@ -998,7 +1165,9 @@ async def aller_vers_objet(client, code: str, objet: str, log: Callable[..., Non
         else:
             await bouger(code, "F", 0.4 if cible["taille"] > 0.35 else 0.7, stoppe)
         step += 1
-    return await finir(f"Je me suis approche de {objet}, mais je ne suis pas encore tout contre.")
+    return await finir(
+        f"Je me suis approche de {objet}, mais je ne suis pas encore tout contre."
+    )
 
 
 async def tout_arreter(code: str, log: Callable[..., None] = log) -> dict:
@@ -1006,9 +1175,19 @@ async def tout_arreter(code: str, log: Callable[..., None] = log) -> dict:
     if servo:
         servo["annule"] = True
     suivi = await arreter_suivi(code)
-    await emit_room(code, "robot_drive", {"cmd": "S", "by": "arret-urgence", "id": f"stopall-{now_ms()}"})
-    await emit_room(code, "robot_drive", {"cmd": "V255", "by": "arret-urgence", "id": f"stopall-v-{now_ms()}"})
-    log(f"[STOP] arret d'urgence code={_js_str(code)} (manoeuvre={_js_str(bool(servo))}, suivi={_js_str(suivi)})")
+    await emit_room(
+        code,
+        "robot_drive",
+        {"cmd": "S", "by": "arret-urgence", "id": f"stopall-{now_ms()}"},
+    )
+    await emit_room(
+        code,
+        "robot_drive",
+        {"cmd": "V255", "by": "arret-urgence", "id": f"stopall-v-{now_ms()}"},
+    )
+    log(
+        f"[STOP] arret d'urgence code={_js_str(code)} (manoeuvre={_js_str(bool(servo))}, suivi={_js_str(suivi)})"
+    )
     return {"servo": bool(servo), "suivi": suivi}
 
 
@@ -1022,10 +1201,18 @@ async def _piloter_en_fond(code: str, cmd: str, secs: float) -> None:
         until = now_ms() + secs * 1000
         n = 0
         while now_ms() < until:
-            await emit_room(code, "robot_drive", {"cmd": cmd, "by": "solana", "id": f"voice-{now_ms()}-{n}"})
+            await emit_room(
+                code,
+                "robot_drive",
+                {"cmd": cmd, "by": "solana", "id": f"voice-{now_ms()}-{n}"},
+            )
             n += 1
             await _attendre_ms(min(HOLD_MS, max(0, until - now_ms())))
-        await emit_room(code, "robot_drive", {"cmd": "S", "by": "solana", "id": f"voice-stop-{now_ms()}"})
+        await emit_room(
+            code,
+            "robot_drive",
+            {"cmd": "S", "by": "solana", "id": f"voice-stop-{now_ms()}"},
+        )
     except Exception:
         pass
 
@@ -1048,20 +1235,34 @@ async def run_tool(name: str, input: dict, ctx: dict) -> list[dict]:
         )
 
     if name == "piloter":
-        correspondance = {"avancer": "F", "reculer": "B", "gauche": "L", "droite": "R", "stop": "S"}
+        correspondance = {
+            "avancer": "F",
+            "reculer": "B",
+            "gauche": "L",
+            "droite": "R",
+            "stop": "S",
+        }
         action = inp.get("action")
         cmd = correspondance.get(action) if isinstance(action, str) else None
         if not cmd:
             return _bloc_texte("Action inconnue.")
         if cmd == "S":
             suivait = await arreter_suivi(code)
-            await emit_room(code, "robot_drive", {"cmd": cmd, "by": "solana", "id": f"voice-{now_ms()}"})
-            return _bloc_texte("Robot arrete, je ne te suis plus." if suivait else "Robot arrete.")
+            await emit_room(
+                code,
+                "robot_drive",
+                {"cmd": cmd, "by": "solana", "id": f"voice-{now_ms()}"},
+            )
+            return _bloc_texte(
+                "Robot arrete, je ne te suis plus." if suivait else "Robot arrete."
+            )
         await arreter_suivi(code)
         secs = max(0.2, min(5, _ou(_js_number(inp.get("duree_secondes")), 1)))
         tache(_piloter_en_fond(code, cmd, secs))
         lg(f"[VOICE] piloter {action} {_js_str(secs)}s")
-        return _bloc_texte(f'Mouvement "{action}" effectue pendant {_js_str(secs)}s, robot arrete.')
+        return _bloc_texte(
+            f'Mouvement "{action}" effectue pendant {_js_str(secs)}s, robot arrete.'
+        )
 
     if name == "regarder":
         if not frame:
@@ -1082,11 +1283,17 @@ async def run_tool(name: str, input: dict, ctx: dict) -> list[dict]:
             pass
         if not pos:
             return _bloc_texte(f"Adresse introuvable : {adresse}.")
-        await emit_room(code, "robot_nav", {
-            "target": {"latitude": pos["latitude"], "longitude": pos["longitude"]},
-            "on": True,
-        })
-        lg(f"[VOICE] aller_a {pos['label']} ({_js_str(pos['latitude'])},{_js_str(pos['longitude'])})")
+        await emit_room(
+            code,
+            "robot_nav",
+            {
+                "target": {"latitude": pos["latitude"], "longitude": pos["longitude"]},
+                "on": True,
+            },
+        )
+        lg(
+            f"[VOICE] aller_a {pos['label']} ({_js_str(pos['latitude'])},{_js_str(pos['longitude'])})"
+        )
         return _bloc_texte(f"Navigation lancee vers {pos['label']}.")
 
     if name == "bouger_camera":
@@ -1094,7 +1301,9 @@ async def run_tool(name: str, input: dict, ctx: dict) -> list[dict]:
         amplitude = _texte(inp.get("amplitude"), "moyen").strip()
         pas = {"peu": 12, "moyen": 28, "beaucoup": 50}.get(amplitude, 28)
         if direction == "centre":
-            await emit_room(code, "robot_cam_move", {"id": f"voix-{now_ms()}", "center": True})
+            await emit_room(
+                code, "robot_cam_move", {"id": f"voix-{now_ms()}", "center": True}
+            )
             lg("[VOICE] camera recentree")
             return _bloc_texte("Camera recentree.")
         deltas = {
@@ -1105,21 +1314,29 @@ async def run_tool(name: str, input: dict, ctx: dict) -> list[dict]:
         }
         if direction not in deltas:
             return _bloc_texte(f"Direction inconnue : {direction}.")
-        await emit_room(code, "robot_cam_move", {"id": f"voix-{now_ms()}", **deltas[direction]})
+        await emit_room(
+            code, "robot_cam_move", {"id": f"voix-{now_ms()}", **deltas[direction]}
+        )
         lg(f"[VOICE] camera {direction} ({pas} deg)")
         await _attendre_ms(700)
         return _bloc_texte(f"Tete tournee vers {direction}.")
 
     if name == "ronde":
         action = _texte(inp.get("action")).strip()
-        connues = ["apprendre_debut", "apprendre_fin", "demarrer", "arreter", "oublier", "etat"]
+        connues = [
+            "apprendre_debut",
+            "apprendre_fin",
+            "demarrer",
+            "arreter",
+            "oublier",
+            "etat",
+        ]
         if action not in connues:
             return _bloc_texte(f"Action de ronde inconnue : {action}.")
         await emit_room(code, "robot_ronde", {"action": action})
         lg(f"[VOICE] ronde {action}")
         phrases = {
-            "apprendre_debut":
-                "Apprentissage lance. Conduis-moi sur le tour complet, puis dis-moi quand c'est termine.",
+            "apprendre_debut": "Apprentissage lance. Conduis-moi sur le tour complet, puis dis-moi quand c'est termine.",
             "apprendre_fin": "Tour enregistre.",
             "demarrer": "Je commence ma ronde.",
             "arreter": "Ronde arretee.",
@@ -1131,27 +1348,35 @@ async def run_tool(name: str, input: dict, ctx: dict) -> list[dict]:
     if name == "suivre_personne":
         cible = _texte(inp.get("cible")).strip() or "la personne devant le robot"
         if not client:
-            return _bloc_texte("Je ne peux pas te suivre : ma vision n'est pas disponible.")
+            return _bloc_texte(
+                "Je ne peux pas te suivre : ma vision n'est pas disponible."
+            )
         lg(f'[SUIVI] demarrage, cible="{cible}"')
         msg = await suivre_personne(client, code, cible, lg)
         return _bloc_texte(msg)
 
     if name == "arreter_suivi":
         stoppe = await arreter_suivi(code)
-        return _bloc_texte("Suivi arrete." if stoppe else "Je n'etais pas en train de suivre.")
+        return _bloc_texte(
+            "Suivi arrete." if stoppe else "Je n'etais pas en train de suivre."
+        )
 
     if name == "aller_vers_objet":
         objet = _texte(inp.get("objet")).strip()
         if not objet:
             return _bloc_texte("Cible non precisee.")
         if not client:
-            return _bloc_texte("Je ne peux pas m'y rendre : ma vision n'est pas disponible.")
+            return _bloc_texte(
+                "Je ne peux pas m'y rendre : ma vision n'est pas disponible."
+            )
         lg(f'[SERVO] cap sur "{objet}"')
         bilan = await aller_vers_objet(client, code, objet, lg)
         return _bloc_texte(bilan)
 
     if name == "etat_robot":
-        attente = asyncio.ensure_future(wait_for_event("robot_status", room=code, timeout=5))
+        attente = asyncio.ensure_future(
+            wait_for_event("robot_status", room=code, timeout=5)
+        )
         await asyncio.sleep(0)
         try:
             await emit_room(code, "robot_status_request", {"by": "solana"})
@@ -1169,12 +1394,20 @@ async def run_tool(name: str, input: dict, ctx: dict) -> list[dict]:
             lon = _js_number(_champ(coords, "longitude"))
             parts.append(f"position {coords['latitude']:.5f}, {lon:.5f}")
             if _est_fini(_champ(st, "gpsAgeMs")):
-                parts.append(f"relevee il y a {_js_round(st['gpsAgeMs'] / 1000)} secondes")
+                parts.append(
+                    f"relevee il y a {_js_round(st['gpsAgeMs'] / 1000)} secondes"
+                )
         else:
-            parts.append("pas encore de position GPS (le recepteur cherche les satellites)")
+            parts.append(
+                "pas encore de position GPS (le recepteur cherche les satellites)"
+            )
         if _champ(st, "obstacleCm") is not None:
             parts.append(f"obstacle a {_js_str(st['obstacleCm'])} cm")
-        parts.append("moteurs connectes et prets" if _js_truthy(_champ(st, "arduinoConnected")) else "moteurs deconnectes")
+        parts.append(
+            "moteurs connectes et prets"
+            if _js_truthy(_champ(st, "arduinoConnected"))
+            else "moteurs deconnectes"
+        )
         if _js_truthy(_champ(st, "navActive")):
             parts.append("navigation en cours")
         return _bloc_texte(", ".join(parts) + ".")
@@ -1186,7 +1419,10 @@ FAST_MODELS = ["claude-opus-5", "claude-opus-4-8"]
 
 
 def fast_enabled() -> bool:
-    return str(os.environ.get("VOICE_FAST") or "").lower() == "true" and MODEL in FAST_MODELS
+    return (
+        str(os.environ.get("VOICE_FAST") or "").lower() == "true"
+        and MODEL in FAST_MODELS
+    )
 
 
 async def create_message(client, params: dict, log: Callable[..., None] = log):
@@ -1200,23 +1436,33 @@ async def create_message(client, params: dict, log: Callable[..., None] = log):
         )
     except Exception as e:
         statut = getattr(e, "status_code", None) or "?"
-        log(f"[VOICE] mode rapide indisponible ({statut} {_msg(e)[:120]}) -> repli en vitesse normale.")
+        log(
+            f"[VOICE] mode rapide indisponible ({statut} {_msg(e)[:120]}) -> repli en vitesse normale."
+        )
         return await client.messages.create(**params)
 
 
 async def ask_claude(client, conv: dict, ctx: dict) -> str:
     lg = (ctx and ctx.get("log")) or log
     for _step in range(6):
-        response = await create_message(client, {
-            "model": MODEL,
-            "max_tokens": 4000,
-            "system": [
-                {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}},
-            ],
-            "output_config": {"effort": EFFORT},
-            "tools": TOOLS,
-            "messages": conv["messages"],
-        }, lg)
+        response = await create_message(
+            client,
+            {
+                "model": MODEL,
+                "max_tokens": 4000,
+                "system": [
+                    {
+                        "type": "text",
+                        "text": SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                ],
+                "output_config": {"effort": EFFORT},
+                "tools": TOOLS,
+                "messages": conv["messages"],
+            },
+            lg,
+        )
 
         if response.stop_reason == "refusal":
             return "Desole, je prefere ne pas repondre a ca."
@@ -1233,7 +1479,9 @@ async def ask_claude(client, conv: dict, ctx: dict) -> str:
                 content = await run_tool(tu.name, tu.input, ctx)
             except Exception as e:
                 content = _bloc_texte(f"Erreur outil : {_msg(e)}")
-            results.append({"type": "tool_result", "tool_use_id": tu.id, "content": content})
+            results.append(
+                {"type": "tool_result", "tool_use_id": tu.id, "content": content}
+            )
         conv["messages"].append({"role": "user", "content": results})
     return "Je n'ai pas reussi a terminer cette action."
 
@@ -1247,17 +1495,27 @@ def attach_voice_brain() -> None:
         _client = client_vision(log)
     except Exception as e:
         log("[VOICE] SDK Anthropic indisponible :", _msg(e))
-    moteur_stt = f"Deepgram {DEEPGRAM_MODEL} (rapide)" if env("DEEPGRAM_API_KEY") else "whisper local (lent)"
+    moteur_stt = (
+        f"Deepgram {DEEPGRAM_MODEL} (rapide)"
+        if env("DEEPGRAM_API_KEY")
+        else "whisper local (lent)"
+    )
     if fast_enabled():
         vitesse = "mode RAPIDE (tarif double)"
     elif str(os.environ.get("VOICE_FAST") or "").lower() == "true":
-        vitesse = f"mode rapide demande mais indisponible sur {MODEL} -> vitesse normale"
+        vitesse = (
+            f"mode rapide demande mais indisponible sur {MODEL} -> vitesse normale"
+        )
     else:
         vitesse = "vitesse normale"
     if _client:
-        log(f"[VOICE] Assistant vocal actif : STT {moteur_stt} + Claude {MODEL} (effort {EFFORT}, {vitesse}).")
+        log(
+            f"[VOICE] Assistant vocal actif : STT {moteur_stt} + Claude {MODEL} (effort {EFFORT}, {vitesse})."
+        )
     else:
-        log(f"[VOICE] Assistant vocal en mode COMMANDES LOCALES (STT {moteur_stt}, pas de cle Claude).")
+        log(
+            f"[VOICE] Assistant vocal en mode COMMANDES LOCALES (STT {moteur_stt}, pas de cle Claude)."
+        )
 
 
 @on("vision_obstacle")
@@ -1302,12 +1560,16 @@ async def _voice_ask(sid: str, data: Any):
     tmp: str | None = None
     try:
         octets = _octets(audio)
-        fd, tmp = tempfile.mkstemp(prefix=f"voice-{_nom_fichier(code)}-{now_ms()}-", suffix=".wav")
+        fd, tmp = tempfile.mkstemp(
+            prefix=f"voice-{_nom_fichier(code)}-{now_ms()}-", suffix=".wav"
+        )
         with os.fdopen(fd, "wb") as f:
             f.write(octets)
         started = now_ms()
         texte = await transcribe(tmp, log)
-        log(f'[VOICE] code={_js_str(code)} transcription ({now_ms() - started}ms): "{texte}"')
+        log(
+            f'[VOICE] code={_js_str(code)} transcription ({now_ms() - started}ms): "{texte}"'
+        )
         if not texte or len(texte) < 2:
             return {"text": "Je n'ai pas compris.", "heard": texte}
 
@@ -1315,12 +1577,21 @@ async def _voice_ask(sid: str, data: Any):
 
         cmd = commande_locale(texte)
         if cmd:
-            out = await run_tool(cmd["tool"], cmd["input"], {
-                "code": code, "frame": frame_buf_early, "log": log, "client": client,
-            })
+            out = await run_tool(
+                cmd["tool"],
+                cmd["input"],
+                {
+                    "code": code,
+                    "frame": frame_buf_early,
+                    "log": log,
+                    "client": client,
+                },
+            )
             out_text = " ".join(_textes(out))
             spoken = cmd["reply"] or out_text
-            log(f'[VOICE] code={_js_str(code)} commande locale "{texte}" -> {cmd["tool"]} (gratuit)')
+            log(
+                f'[VOICE] code={_js_str(code)} commande locale "{texte}" -> {cmd["tool"]} (gratuit)'
+            )
             return {"text": spoken, "heard": texte, "local": True}
 
         if not client:
@@ -1334,20 +1605,29 @@ async def _voice_ask(sid: str, data: Any):
             }
 
         conv = get_conversation(code)
-        conv["messages"].append({"role": "user", "content": [{"type": "text", "text": texte}]})
+        conv["messages"].append(
+            {"role": "user", "content": [{"type": "text", "text": texte}]}
+        )
         if len(conv["messages"]) > MAX_TURNS * 2:
-            conv["messages"] = conv["messages"][-MAX_TURNS * 2:]
+            conv["messages"] = conv["messages"][-MAX_TURNS * 2 :]
             while conv["messages"] and (
                 conv["messages"][0]["role"] != "user"
                 or (
                     isinstance(conv["messages"][0]["content"], list)
-                    and any(_type_bloc(b) == "tool_result" for b in conv["messages"][0]["content"])
+                    and any(
+                        _type_bloc(b) == "tool_result"
+                        for b in conv["messages"][0]["content"]
+                    )
                 )
             ):
                 conv["messages"].pop(0)
 
         frame_buf = _octets(frame) if _js_truthy(frame) else None
-        text = await ask_claude(client, conv, {"code": code, "frame": frame_buf, "log": log, "client": client})
+        text = await ask_claude(
+            client,
+            conv,
+            {"code": code, "frame": frame_buf, "log": log, "client": client},
+        )
         log(f'[VOICE] code={_js_str(code)} reponse ({now_ms() - started}ms): "{text}"')
         return {"text": text, "heard": texte}
     except Exception as e:

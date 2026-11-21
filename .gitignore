@@ -49,9 +49,9 @@ google-services.json
 GoogleService-Info.plist
 
 # Sorties de compilation natives (regenerees par expo prebuild / gradle)
-/android/
-/ios/
-/build/
+/mobile/android/
+/mobile/ios/
+/mobile/build/
 
 # Binaires telecharges
 *.exe

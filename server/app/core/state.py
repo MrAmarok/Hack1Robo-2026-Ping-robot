@@ -64,7 +64,11 @@ async def reattribuer_pilote(code: str) -> bool:
             continue
         pilotes[code] = sid
         pseudo = (users.get(sid) or {}).get("pseudo")
-        await emit_to(sid, "role_acces", {"role": "pilote", "raison": "le pilote precedent est parti"})
+        await emit_to(
+            sid,
+            "role_acces",
+            {"role": "pilote", "raison": "le pilote precedent est parti"},
+        )
         await emit_room(code, "pilote_change", {"pseudo": pseudo})
         log(f"[ROLE] {code} : {pseudo or sid} devient pilote.")
         return True
@@ -82,7 +86,9 @@ async def marquer_robot(sid: str) -> None:
         return
     if pilotes.get(info["code"]) == sid:
         pilotes.pop(info["code"], None)
-        log(f"[ROLE] {info['code']} : le robot avait pris la place de pilote, elle est rendue.")
+        log(
+            f"[ROLE] {info['code']} : le robot avait pris la place de pilote, elle est rendue."
+        )
         await reattribuer_pilote(info["code"])
     groupe_spectateurs(info["code"]).discard(sid)
 
@@ -93,7 +99,9 @@ async def refuse_si_pas_pilote(sid: str, nom: str) -> bool:
     if est_pilote(sid):
         return False
     info = users.get(sid) or {}
-    log(f"[ROLE] commande \"{nom}\" refusee a {info.get('pseudo') or sid} : spectateur.")
+    log(
+        f"[ROLE] commande \"{nom}\" refusee a {info.get('pseudo') or sid} : spectateur."
+    )
     await emit_to(sid, "acces_refuse_commande", {"commande": nom})
     return True
 
@@ -140,8 +148,13 @@ def enqueue_for(user_id: str, item: dict) -> None:
 
 
 _TYPES_FILE = {
-    "buzz", "meet_request", "meet_accepted", "meet_declined",
-    "meet_canceled", "peer_location", "lobby_state",
+    "buzz",
+    "meet_request",
+    "meet_accepted",
+    "meet_declined",
+    "meet_canceled",
+    "peer_location",
+    "lobby_state",
 }
 
 
