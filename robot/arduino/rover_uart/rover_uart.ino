@@ -289,13 +289,22 @@ void distance_gerer() {
 
   unsigned long duree = pulseIn(PIN_ECHO, HIGH, 25000UL);
   if (duree==0) {
+#ifdef SONAR_DEBUG
+    Serial.println(F("[SONAR][FIRMWARE] No echo after 25000 us"));
+#endif
     pinMode(PIN_ECHO, OUTPUT);
     pinMode(PIN_ECHO, LOW);
     delay(100);
     pinMode(PIN_ECHO, INPUT);
   } else {
     long dist = duree * 17 / 100;               // vitesse du son, aller-retour
-    if (dist < 2 || dist > 400) return;     // hors des limites du capteur
+    if (dist < 2 || dist > 400) {
+#ifdef SONAR_DEBUG
+      Serial.print(F("[SONAR][FIRMWARE] Out of range (cm): "));
+      Serial.println(dist);
+#endif
+      return;
+    }
     Serial.print("D:0,0,0,0,");
     Serial.println(dist);
   }

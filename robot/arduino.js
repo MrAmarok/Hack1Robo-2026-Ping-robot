@@ -52,20 +52,25 @@ class Arduino {
       } else if (line.startsWith('D:')) {
         const mesure = line.slice(2).trim();
         if (RE_LIGNE_CAPTEUR.test(mesure)) {
+          this.log(`[SONAR][SERIAL] Received CSV: ${mesure}`);
           this.onLigneCapteur?.(mesure);
           const distance = mesure.split(',')[4].trim();
           if (distance) this.onSensor(Number(distance));
         } else if (/^\d+$/.test(mesure)) {
           const cm = Number(mesure);
           if (Number.isFinite(cm)) {
+            this.log(`[SONAR][SERIAL] Received distance-only frame: ${cm} cm`);
             this.onSensor(cm);
             if (cm > 0) this.onLigneCapteur?.(`0,0,0,0,${cm}`);
           }
+        } else {
+          this.log(`[SONAR][SERIAL] Invalid D: frame: ${JSON.stringify(mesure.slice(0, 120))}`);
         }
       } else if (line.startsWith('PRES:')) {
         // Le radar n'envoie que ses CHANGEMENTS d'etat.
         this.onPresence(line.slice(5).trim() === '1');
       } else if (this.onLigneCapteur && RE_LIGNE_CAPTEUR.test(line)) {
+        this.log(`[SONAR][SERIAL] Received bare CSV: ${line}`);
         this.onLigneCapteur(line);
       } else if (line) {
         this.log(`Arduino > ${line}`);

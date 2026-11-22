@@ -32,6 +32,7 @@ def start(code: str) -> Scan:
         scan = Scan(uuid4().hex)
         capteur.ajouter_csv(directory(code) / f"{scan.session}.csv", [])
         active[code] = scan
+        log(f"[SONAR][SCAN] Recording started session={scan.session}")
     return active[code]
 
 
@@ -44,9 +45,13 @@ def record(code: str, rows: list[str]) -> None:
     except (OSError, capteur.TropVolumineux) as error:
         log(f"[SONAR] Recording stopped for scan {scan.session}: {error}")
         scan.error = "Recording stopped early. Save the readings collected so far."
+    else:
+        log(f"[SONAR][SCAN] Recorded session={scan.session} rows={len(rows)}")
 
 
 def render(code: str, session: str) -> dict:
+    started = time.monotonic()
+    log(f"[SONAR][MAP] Building session={session}")
     folder = directory(code)
     result = {"session": session, "snapshot": None, "mapError": None}
     try:
@@ -54,6 +59,7 @@ def render(code: str, session: str) -> dict:
         image, _ = sonar_mapper.build_map(readings, RESOLUTION_M)
     except ValueError as error:
         result["mapError"] = f"Map unavailable: {error}."
+        log(f"[SONAR][MAP] Build failed session={session}: {error}")
     else:
         result["snapshot"] = {
             "code": code,
@@ -72,6 +78,10 @@ def render(code: str, session: str) -> dict:
         temporary.replace(folder / f"{session}.json")
     finally:
         temporary.unlink(missing_ok=True)
+    duration_ms = round((time.monotonic() - started) * 1000)
+    if result["snapshot"] is not None:
+        log(f"[SONAR][MAP] Saved session={session} readings={len(readings)} "
+            f"size={image.width}x{image.height} duration_ms={duration_ms}")
     return result
 
 

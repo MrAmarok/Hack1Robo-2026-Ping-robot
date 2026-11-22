@@ -27,12 +27,20 @@ type ScanEntry = { session: string; savedAt: number };
 type SavedScan = { session: string; snapshot: SonarSnapshot | null; mapError: string | null };
 
 async function scanRequest<T>(socket: Socket | null, event: string, session?: string): Promise<T> {
-  if (!socket?.connected) throw new Error('Connection lost. Reconnect and try again.');
-  const response = await socket.timeout(event === 'sonar_scan_save' ? 60000 : 5000)
-    .emitWithAck(event, { session }) as (T & { error?: string }) | null;
-  if (!response) throw new Error('The server did not return a scan response.');
-  if (response.error) throw new Error(response.error);
-  return response;
+  const polling = event === 'sonar_scan_status';
+  if (!polling) console.log('[SONAR][APP] Request', { event, session });
+  try {
+    if (!socket?.connected) throw new Error('Connection lost. Reconnect and try again.');
+    const response = await socket.timeout(event === 'sonar_scan_save' ? 60000 : 5000)
+      .emitWithAck(event, { session }) as (T & { error?: string; session?: string | null }) | null;
+    if (!response) throw new Error('The server did not return a scan response.');
+    if (response.error) throw new Error(response.error);
+    if (!polling) console.log('[SONAR][APP] ACK', { event, session: response.session ?? session });
+    return response;
+  } catch (error) {
+    console.warn('[SONAR][APP] Request failed', { event, session, error });
+    throw error;
+  }
 }
 
 const legend = [
@@ -94,6 +102,20 @@ export function SonarMapView({
     : image && Platform.OS === 'web'
       ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(image.data)}`
       : undefined;
+
+  useEffect(() => {
+    if (selected?.mapError) {
+      console.warn('[SONAR][APP] Map unavailable', { session: selected.session, error: selected.mapError });
+    }
+    if (snapshot) {
+      console.log('[SONAR][APP] Rendering map', {
+        session: selected?.session,
+        format: snapshot.image.format,
+        readings: snapshot.readingCount,
+        updatedAt: snapshot.updatedAt,
+      });
+    }
+  }, [selected, snapshot]);
 
   const Container = onClose ? SafeAreaView : View;
 
@@ -173,9 +195,14 @@ export function SonarMapView({
               resizeMode="contain"
               source={{ uri }}
               style={styles.map}
+              onLoad={() => console.log('[SONAR][APP] Map image loaded', { updatedAt: snapshot?.updatedAt })}
+              onError={() => console.warn('[SONAR][APP] Map image could not be loaded', { updatedAt: snapshot?.updatedAt })}
             />
           ) : image?.format === 'svg' ? (
-            <SvgXml accessibilityLabel="Sonar occupancy grid" xml={image.data} width="100%" height="100%" />
+            <SvgXml
+              accessibilityLabel="Sonar occupancy grid" xml={image.data} width="100%" height="100%"
+              onError={() => console.warn('[SONAR][APP] Map SVG could not be parsed', { updatedAt: snapshot?.updatedAt })}
+            />
           ) : (
             <Text style={styles.empty}>{status}</Text>
           )}

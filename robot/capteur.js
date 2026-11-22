@@ -44,8 +44,8 @@ class CanalCapteur {
     let ws;
     try {
       ws = new WS(this.url());
-    } catch (e) {
-      this.log(`Capteur: connexion impossible (${e.message}).`);
+    } catch {
+      this.log(`[SONAR][UPLOAD] Could not open WebSocket (session=${this.session})`);
       this.relancer();
       return;
     }
@@ -62,26 +62,28 @@ class CanalCapteur {
       try {
         m = JSON.parse(typeof e.data === 'string' ? e.data : String(e.data));
       } catch {
+        this.log(`[SONAR][UPLOAD] Invalid JSON response (session=${this.session})`);
         return;
       }
       if (m.type === 'bonjour') {
-        this.log(`Capteur: connecte au serveur, session ${m.session} (${m.lignes} lignes deja recues).`);
+        this.log(`[SONAR][UPLOAD] Connected session=${m.session} stored=${m.lignes}`);
       } else if (m.type === 'ack') {
         this.enVol.shift();
         this.acceptees += m.recues || 0;
+        this.log(`[SONAR][UPLOAD] ACK session=${this.session} accepted=${m.recues} rejected=${m.rejetees} stored=${m.total}`);
         if (m.rejetees) {
-          this.log(`Capteur: ${m.rejetees} ligne(s) refusee(s) par le serveur : ${JSON.stringify(m.erreurs || [])}`);
+          this.log(`[SONAR][UPLOAD] Rejected rows: ${JSON.stringify(m.erreurs || [])}`);
         }
       } else if (m.type === 'erreur') {
-        this.log(`Capteur: le serveur refuse (${m.erreur}).`);
+        this.log(`[SONAR][UPLOAD] Server error session=${this.session}: ${m.erreur}`);
         if (/cle|session|code/.test(m.erreur || '')) this.arrete = true;
       }
     };
-    ws.onerror = () => this.perdu(ws);
-    ws.onclose = () => this.perdu(ws);
+    ws.onerror = () => this.perdu(ws, 'WebSocket error');
+    ws.onclose = (event) => this.perdu(ws, `WebSocket closed (code=${event.code})`);
   }
 
-  perdu(ws) {
+  perdu(ws, reason) {
     if (this.ws !== ws) return;
     this.ouvert = false;
     this.ws = null;
@@ -90,12 +92,14 @@ class CanalCapteur {
       this.file = [].concat(...this.enVol, this.file);
       this.enVol = [];
     }
+    this.log(`[SONAR][UPLOAD] ${reason} session=${this.session} queued=${this.file.length}`);
     this.relancer();
   }
 
   relancer() {
     if (this.arrete) return;
     const d = this.delai;
+    this.log(`[SONAR][UPLOAD] Reconnecting in ${d} ms (session=${this.session})`);
     this.delai = Math.min(this.delai * 2, 10000);
     setTimeout(() => this.connecter(), d);
   }
@@ -132,8 +136,10 @@ class CanalCapteur {
         this.enVol.push(lot);
       } catch {
         this.file = lot.concat(this.file);
+        this.log(`[SONAR][UPLOAD] Send failed session=${this.session} queued=${this.file.length}`);
         return;
       }
+      this.log(`[SONAR][UPLOAD] Sent session=${this.session} rows=${lot.length} queued=${this.file.length}`);
     }
   }
 

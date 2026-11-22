@@ -69,6 +69,9 @@ async def capteur_ws(ws: WebSocket):
                     await ws.send_json({"type": "erreur", "erreur": str(e)})
                     await ws.close(code=1009)
                     return
+                except OSError as error:
+                    log(f"[CAPTEUR] CSV write failed session={session}: {error}")
+                    raise
             recues_connexion += len(valides)
             stats["messages"] += 1
             stats["lignes"] += len(valides)
@@ -76,7 +79,7 @@ async def capteur_ws(ws: WebSocket):
             stats["total"] = total
             derniere = valides[-1] if valides else "-"
             log(f"[CAPTEUR] {code} : message recu, {len(valides)} ligne(s) acceptee(s), "
-                f"{len(erreurs)} refusee(s), total {total} - derniere : {derniere}")
+                f"{len(erreurs)} refusee(s), total {total} - derniere : {derniere} (session={session})")
             accuse = {"type": "ack", "recues": len(valides), "rejetees": len(erreurs), "total": total}
             if erreurs:
                 accuse["erreurs"] = erreurs[:MAX_ERREURS]

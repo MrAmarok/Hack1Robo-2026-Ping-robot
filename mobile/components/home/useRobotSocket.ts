@@ -124,6 +124,9 @@ export function useRobotSocket({
 
     s.on('sonar_map_snapshot', (snapshot: SonarSnapshot) => {
       if (snapshot.code !== pairCodeRef.current.trim()) return;
+      console.log('[SONAR][APP] Live snapshot received', {
+        updatedAt: snapshot.updatedAt, readings: snapshot.readingCount, format: snapshot.image.format,
+      });
       setSonarSnapshot((current) =>
         current?.code === snapshot.code && current.updatedAt >= snapshot.updatedAt
           ? current

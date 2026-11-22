@@ -1544,6 +1544,8 @@ const capteur = CONFIG.CAPTEUR_ENABLE
     })
   : null;
 
+if (!capteur) log('[SONAR][UPLOAD] Upload disabled (CAPTEUR_ENABLE=false)');
+
 const arduino = new Arduino({
   port: CONFIG.ARDUINO_PORT,
   baud: CONFIG.ARDUINO_BAUD,

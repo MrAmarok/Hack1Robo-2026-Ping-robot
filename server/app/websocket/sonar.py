@@ -50,6 +50,8 @@ async def watch_snapshots() -> None:
         snapshot = await asyncio.to_thread(_read_snapshot, path)
         if snapshot is not None and snapshot != _latest:
             _latest = snapshot
+            log(f"[SONAR][LIVE] Snapshot loaded updated_at={snapshot['updatedAt']} "
+                f"readings={snapshot['readingCount']} format={snapshot['image']['format']}")
             for sid in room_sids(ROOM):
                 await send_latest(sid, ROOM)
         await asyncio.sleep(0.5)
@@ -69,6 +71,7 @@ async def send_latest(sid: str, code: str) -> None:
 async def _request_snapshot(sid, _data):
     code = (users.get(sid) or {}).get("code")
     if code == ROOM and code and sid in room_sids(code):
+        log(f"[SONAR][LIVE] Snapshot requested available={_latest is not None}")
         await send_latest(sid, code)
 
 
