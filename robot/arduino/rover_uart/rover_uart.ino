@@ -272,8 +272,9 @@ void presence_gerer() {
 // n'avancent. A 1 Hz la saccade est invisible ; a 10 Hz elle ne le serait pas.
 //
 // 25 ms d'attente = environ 4 m de portee, largement au-dela de l'utile.
-// Pas d'echo dans ce delai = rien devant (ou surface qui renvoie mal), on
-// n'envoie alors aucune ligne plutot qu'une fausse distance.
+// Pas d'echo dans ce delai = rien devant (ou surface qui renvoie mal, ou
+// capteur muet) : la ligne part quand meme, avec la distance vide, pour qu'on
+// voie cote serveur que la mesure tourne.
 uint32_t t_mesure = 0;
 
 void distance_gerer() {
@@ -288,19 +289,10 @@ void distance_gerer() {
   digitalWrite(PIN_TRIG, LOW);
 
   unsigned long duree = pulseIn(PIN_ECHO, HIGH, 25000UL);
-  if (duree==0) {
-    pinMode(PIN_ECHO, OUTPUT);
-    pinMode(PIN_ECHO, LOW);
-    delay(100);
-    pinMode(PIN_ECHO, INPUT);
-  } else {
-    long dist = duree * 17 / 100;               // vitesse du son, aller-retour
-    if (dist < 2 || dist > 400) return;     // hors des limites du capteur
-    Serial.print("0,0,0,0,");
-    Serial.println(dist);
-  }
-  // Serial.print(F("D:"));
-  // Serial.println(cm);
+  long cm = duree * 17 / 1000;               // us -> cm, aller-retour
+  Serial.print(F("D:0,0,0,0,"));
+  if (cm >= 2 && cm <= 400) Serial.print(cm);   // vide = pas d'echo valide
+  Serial.println();
 }
 
 // ---------------- protocole ----------------
