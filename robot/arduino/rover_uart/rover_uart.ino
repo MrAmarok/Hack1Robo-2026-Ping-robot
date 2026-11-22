@@ -77,6 +77,8 @@
 
 #include <Servo.h>
 
+#define SONAR_DEBUG
+
 const uint8_t G_RPWM = 5,  G_LPWM = 6;
 const uint8_t D_RPWM = 3,  D_LPWM = 11;
 const uint8_t EN_PONTS = 4;
@@ -298,7 +300,7 @@ void distance_gerer() {
     pinMode(PIN_ECHO, INPUT);
   } else {
     long dist = duree * 17 / 100;               // vitesse du son, aller-retour
-    if (dist < 2 || dist > 400) {
+    if (dist < 20 || dist > 4000) {
 #ifdef SONAR_DEBUG
       Serial.print(F("[SONAR][FIRMWARE] Out of range (cm): "));
       Serial.println(dist);
@@ -308,8 +310,6 @@ void distance_gerer() {
     Serial.print("D:0,0,0,0,");
     Serial.println(dist);
   }
-  // Serial.print(F("D:"));
-  // Serial.println(cm);
 }
 
 // ---------------- protocole ----------------
