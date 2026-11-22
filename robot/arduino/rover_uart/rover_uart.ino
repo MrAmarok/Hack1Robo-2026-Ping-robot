@@ -289,9 +289,9 @@ void distance_gerer() {
   digitalWrite(PIN_TRIG, LOW);
 
   unsigned long duree = pulseIn(PIN_ECHO, HIGH, 25000UL);
-  long cm = duree * 17 / 1000;               // us -> cm, aller-retour
+  long mm = duree * 17 / 100;               // us -> mm, aller-retour
   Serial.print(F("D:0,0,0,0,"));
-  if (cm >= 2 && cm <= 400) Serial.print(cm);   // vide = pas d'echo valide
+  if (mm >= 20 && mm <= 4000) Serial.print(mm);   // vide = pas d'echo valide
   Serial.println();
 }
 
