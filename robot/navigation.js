@@ -6,6 +6,7 @@
 // Cycle : STOP (moteurs off) -> attendre que le champ se stabilise -> lire le
 // cap -> décider -> avancer (F) ou pivoter (L/R) un court instant -> recommencer.
 'use strict';
+const { performance } = require('perf_hooks');
 
 const toRad = (d) => (d * Math.PI) / 180;
 const toDeg = (r) => (r * 180) / Math.PI;
@@ -50,6 +51,7 @@ class Navigator {
         angleTol: 25,        // tolérance de cap avant d'avancer (°)
         arrivalRadius: 3,    // distance "arrivé" (m)
         obstacleStopCm: 25,  // évitement obstacle (cm)
+        obstacleTtlMs: 3000, // validité d'une mesure d'obstacle (ms)
         settleMs: 300,       // pause moteurs coupés avant de lire la boussole
         driveMs: 1200,       // durée d'une avance
         turnMsPerDeg: 6,     // durée de pivot par degré d'écart
@@ -61,6 +63,10 @@ class Navigator {
     );
     this.running = false;
     this.obstacleCm = 999;
+    this.obstacleExpireAt = 0;
+    this.cameraCm = null;
+    this.cameraExpireAt = 0;
+    this.cameraAttenteJusqua = 0;
     this.preferredSide = null; // côté de contournement suggéré par la caméra
     this._sideTimer = null;
     this.arrived = false;
@@ -77,8 +83,26 @@ class Navigator {
     this._sideTimer = setTimeout(() => { this.preferredSide = null; }, 8000);
   }
 
+  // Une mesure périme : sans écho l'ultrason n'en donne pas de nouvelle, et le
+  // robot tournerait sans fin sur le dernier obstacle vu.
   setObstacle(cm) {
-    if (Number.isFinite(cm)) this.obstacleCm = cm;
+    if (!Number.isFinite(cm)) return;
+    this.obstacleCm = cm;
+    this.obstacleExpireAt = performance.now() + this.opts.obstacleTtlMs;
+  }
+
+  setObstacleCamera(cm, ttlMs = 0, attenteMs = 0) {
+    this.cameraCm = cm;
+    this.cameraExpireAt = performance.now() + ttlMs;
+    this.cameraAttenteJusqua = this.cameraExpireAt + attenteMs;
+  }
+
+  ultrasonRecent() {
+    return performance.now() < this.obstacleExpireAt ? this.obstacleCm : null;
+  }
+
+  _estProche(cm) {
+    return Number.isFinite(cm) && cm > 0 && cm < this.opts.obstacleStopCm;
   }
 
   start() {
@@ -162,13 +186,25 @@ class Navigator {
     // Obstacle droit devant -> on tourne pour l'éviter.
     // Le côté est celui que la caméra a jugé libre (setPreferredSide) ;
     // à défaut on tourne à gauche, comme avant.
-    if (this.obstacleCm > 0 && this.obstacleCm < this.opts.obstacleStopCm) {
+    const maintenant = performance.now();
+    const ultrason = this.ultrasonRecent();
+    const ultrasonProche = this._estProche(ultrason);
+    const cameraProche = this._estProche(this.cameraCm);
+    if (ultrasonProche || (cameraProche && maintenant < this.cameraExpireAt)) {
+      const obstacle = ultrasonProche ? ultrason : this.cameraCm;
       const cmd = this.preferredSide === 'droite' ? 'R' : 'L';
       const cote = cmd === 'R' ? 'droite' : 'gauche';
-      this._log(cmd, `obstacle à ${this.obstacleCm} cm — contournement par la ${cote}`);
+      this._log(cmd, `obstacle à ${obstacle} cm — contournement par la ${cote}`);
       this._lastTurn = null;
       this.send(cmd);
       this._t = setTimeout(() => this._senseThenAct(), 600);
+      return;
+    }
+    if (cameraProche && maintenant < this.cameraAttenteJusqua) {
+      this.send('S');
+      this._log('S', 'obstacle caméra — attente de la prochaine image');
+      this._lastTurn = null;
+      this._t = setTimeout(() => this._senseThenAct(), 500);
       return;
     }
 

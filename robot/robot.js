@@ -1251,7 +1251,7 @@ function robotStatusPayload() {
     gpsAgeMs,
     heading: lastFix?.heading ?? null,
     speedKnots: lastFix?.speedKnots ?? null,
-    obstacleCm: lastObstacleCm,
+    obstacleCm: navigator?.ultrasonRecent() ?? null,
     modeAbsent,
     arduinoConnected: arduino.connected,
     navActive: !!navigator?.running,
@@ -1849,13 +1849,17 @@ rl.on('line', (input) => {
       log(lastFix ? `${lastFix.latitude}, ${lastFix.longitude}` : 'Pas encore de fix GPS.');
       break;
     case 'capteur':
-    case 'mur':
+    case 'mur': {
+      const cm = navigator.ultrasonRecent();
       log(
         lastObstacleCm == null
           ? 'Capteur: AUCUNE lecture (non branche, ou mauvais cablage Echo=A4 / Trig=A5).'
-          : `Capteur: ${lastObstacleCm} cm`
+          : cm == null
+            ? `Capteur: pas d'echo depuis plus de ${navigator.opts.obstacleTtlMs / 1000} s (derniere lecture: ${lastObstacleCm} cm).`
+            : `Capteur: ${cm} cm`
       );
       break;
+    }
     case 'cap': {
       const h =
         compass && typeof compass.getHeading === 'function' ? compass.getHeading() : null;
@@ -2554,13 +2558,14 @@ if (CONFIG.VOICE_ENABLE && CONFIG.TTS_ENABLE) {
 // ========================
 // Le robot demande regulierement au serveur "la voie est-elle libre ?" en
 // envoyant une image. La reponse est convertie en distance et injectee dans
-// navigator.setObstacle() : la logique de contournement deja ecrite s'en
+// navigator.setObstacleCamera() : la logique de contournement deja ecrite s'en
 // charge, exactement comme si le capteur a ultrasons avait vu l'obstacle.
 // Avantage sur l'ultrason : plusieurs metres de portee au lieu de 25 cm, et
 // la camera sait dire de quel cote passer.
 let visionObstacleCm = null;
 let visionObstacleAt = 0;
 let visionBusy = false;
+const VISION_ATTENTE_MAX_MS = 24000;
 
 async function verifierVoieLibre() {
   if (!CONFIG.NAV_VISION_ENABLE || visionBusy) return;
@@ -2604,13 +2609,12 @@ async function verifierVoieLibre() {
     if (res.libre) {
       visionObstacleCm = null;
       debugLog('[VISION] voie libre');
+      if (navigator) navigator.setObstacleCamera(null);
     } else {
       visionObstacleCm = res.distanceCm;
       log(`Vision: obstacle a ~${Math.round(res.distanceCm / 100)} m${res.coteLibre ? `, passage ${res.coteLibre}` : ''}.`);
       if (navigator) {
-        // On force la valeur vue par la camera : c'est elle qui declenche le
-        // contournement, bien avant que l'ultrason ne detecte quoi que ce soit.
-        navigator.setObstacle(res.distanceCm);
+        navigator.setObstacleCamera(res.distanceCm, 2 * CONFIG.NAV_VISION_MS, VISION_ATTENTE_MAX_MS);
         if (res.coteLibre && typeof navigator.setPreferredSide === 'function') {
           navigator.setPreferredSide(res.coteLibre);
         }
