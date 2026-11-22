@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Socket } from 'socket.io-client';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 
@@ -90,7 +90,6 @@ export function SonarMapView({
   }
 
   const snapshot = selected ? selected.snapshot : scan?.session ? null : liveSnapshot;
-  const { height } = useWindowDimensions();
   const status = selected?.mapError ?? (!connected
     ? 'Waiting for the server connection.'
     : scan?.session
@@ -188,7 +187,7 @@ export function SonarMapView({
           <ScanButton label={scan?.session ? 'Back to current scan' : 'Show live map'} onPress={() => setSelected(null)} />
         )}
 
-        <View style={[styles.canvas, { height: Math.max(200, Math.min(height * 0.55, 540)) }]}>
+        <View style={styles.canvas}>
           {uri ? (
             <Image
               accessibilityLabel="Sonar occupancy grid"
@@ -254,7 +253,7 @@ function ScanButton({ label, onPress, disabled = false, selected = false }: {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0B1016' },
-  content: { width: '100%', maxWidth: 820, alignSelf: 'center', padding: 20, gap: 18 },
+  content: { flexGrow: 1, padding: 12, gap: 10 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { flexShrink: 1, color: '#E8FFF8', fontSize: 26, fontWeight: '700' },
   close: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
@@ -268,6 +267,8 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.45 },
   history: { gap: 8 },
   canvas: {
+    flex: 1,
+    minHeight: 120,
     justifyContent: 'center',
     backgroundColor: '#101B24',
     borderColor: '#344B53',

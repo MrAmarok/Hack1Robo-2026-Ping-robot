@@ -35,7 +35,7 @@ export const pilotStyles = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', padding: 12, zIndex: 30 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#030809B8' },
   dialog: { width: '100%', maxWidth: 460, maxHeight: '100%', padding: 12, gap: 8, borderRadius: 15, borderWidth: 1, borderColor: '#52796A', backgroundColor: '#111C1D' },
-  mapDialog: { height: '100%', maxHeight: 530, maxWidth: 640 },
+  mapDialog: { flex: 1, maxWidth: 1200 },
   dialogHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   optionScroll: { flexGrow: 0 },
   options: { gap: 8, paddingTop: 2, paddingBottom: 2 },
