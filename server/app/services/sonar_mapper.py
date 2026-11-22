@@ -36,6 +36,13 @@ class Tolerances:
     heading_deg: float = 0.0
 
 
+def parse_reading(x: float, y: float, heading: float, sensor_angle: float, distance: float) -> Reading | None:
+    if 2 <= distance <= 400:
+        angle = math.radians((heading % 360 + sensor_angle % 360) % 360)
+        return Reading(x, y, angle, distance / 100)
+    return None
+
+
 def load_readings(path: Path) -> list[Reading]:
     readings = []
     with path.open(newline="", encoding="utf-8-sig") as source:
@@ -50,9 +57,9 @@ def load_readings(path: Path) -> list[Reading]:
                     raise ValueError("values must be finite")
             except (TypeError, ValueError) as error:
                 raise ValueError(f"CSV line {rows.line_num}: {error}") from error
-            if 2 <= distance <= 400:
-                angle = math.radians((heading % 360 + sensor_angle % 360) % 360)
-                readings.append(Reading(x, y, angle, distance / 100))
+            reading = parse_reading(x, y, heading, sensor_angle, distance)
+            if reading is not None:
+                readings.append(reading)
     if not readings:
         raise ValueError("no valid HC-SR04 echoes (2–400 cm)")
     return readings

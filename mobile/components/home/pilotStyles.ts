@@ -41,4 +41,11 @@ export const pilotStyles = StyleSheet.create({
   options: { gap: 8, paddingTop: 2, paddingBottom: 2 },
   optionRow: { flexDirection: 'row', gap: 6 },
   map: { flex: 1, minHeight: 0, borderRadius: 8, overflow: 'hidden' },
+  sonarPreview: {
+    position: 'absolute', top: 62, right: 10, width: 144, gap: 4, padding: 6,
+    backgroundColor: '#0B1415', borderColor: '#52796A', borderWidth: 1, borderRadius: 8, zIndex: 2,
+  },
+  sonarPreviewMap: { height: 78, justifyContent: 'center', backgroundColor: '#101B24' },
+  sonarPreviewImage: { width: '100%', height: '100%' },
+  sonarPreviewText: { color: '#E8FFF8', fontSize: 11, textAlign: 'center' },
 });

@@ -1,5 +1,5 @@
 import { Modal, View, Image, Text, TouchableOpacity, ScrollView, Pressable } from 'react-native';
-import { SonarMapView, type SonarSnapshot } from '@/components/SonarMapView';
+import { SonarMapView, useSonarScan, type SonarSnapshot } from '@/components/SonarMapView';
 import { styles, HUD } from './styles';
 import { webrtc } from './config';
 import { RobotLinkBadge, SpeedSlider } from './controls';
@@ -156,6 +156,9 @@ export function CameraModal({
   const [dialog, setDialog] = useState<'options' | 'map' | null>(null);
   const [option, setOption] = useState<'camera' | 'audio' | 'alerts'>('camera');
   const [mapTab, setMapTab] = useState<'gps' | 'sonar'>('gps');
+  const canViewScans = estPilote || role === 'spectateur';
+  const sonar = useSonarScan(socketRef, camFullscreen && socketOnline && canViewScans);
+  const activeScan = canViewScans ? sonar.scan : null;
 
   useEffect(() => {
     if (!camFullscreen) setDialog(null);
@@ -301,6 +304,43 @@ export function CameraModal({
               </>
             )}
 
+            {!layerOpen && activeScan?.session && (
+              <View style={pilot.sonarPreview} pointerEvents="box-none">
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open sonar scan"
+                  onPress={() => openMap('sonar')}
+                  style={pilot.sonarPreviewMap}
+                >
+                  {activeScan.snapshot ? (
+                    <Image
+                      accessibilityLabel="Live sonar preview"
+                      source={{ uri: `data:image/png;base64,${activeScan.snapshot.image.data}` }}
+                      resizeMode="contain"
+                      style={pilot.sonarPreviewImage}
+                    />
+                  ) : (
+                    <Text style={pilot.sonarPreviewText}>Waiting for echoes</Text>
+                  )}
+                </Pressable>
+                <Text style={pilot.sonarPreviewText}>
+                  {activeScan.readingCount} readings{!socketOnline ? ' · Disconnected' : ''}
+                </Text>
+                {estPilote && (
+                  <PilotButton
+                    label={sonar.pending === 'save' || activeScan.saving ? 'Saving…' : 'Save scan'}
+                    disabled={!socketOnline || !!sonar.pending || activeScan.saving}
+                    onPress={async () => { if (await sonar.change('save')) openMap('sonar'); }}
+                  />
+                )}
+                {!!(sonar.error || activeScan.recordingError) && (
+                  <Text accessibilityLiveRegion="polite" style={pilot.sonarPreviewText}>
+                    {sonar.error || activeScan.recordingError}
+                  </Text>
+                )}
+              </View>
+            )}
+
             <View style={isLandscape ? pilot.landscapeControls : pilot.portraitControls} pointerEvents="box-none">
               {!isLandscape && (
                 <View style={pilot.groupFill}>
@@ -359,8 +399,10 @@ export function CameraModal({
                         <SonarMapView
                           key={pairCode}
                           connected={socketOnline}
-                          canViewScans={estPilote || role === 'spectateur'}
+                          canViewScans={canViewScans}
                           isPilot={estPilote}
+                          scanControl={sonar}
+                          onReturnToPilot={closeDialog}
                           socketRef={socketRef}
                           snapshot={sonarSnapshot?.code === pairCode.trim() ? sonarSnapshot : null}
                         />

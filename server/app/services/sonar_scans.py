@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,6 +12,8 @@ from app.core.logs import log
 from app.services import capteur, sonar_mapper
 
 RESOLUTION_M = 0.05
+PREVIEW_RESOLUTION_M = 0.15
+PREVIEW_SAMPLE_LIMIT = 384
 
 
 @dataclass
@@ -18,6 +21,12 @@ class Scan:
     session: str
     saving: bool = False
     error: str | None = None
+    reading_count: int = 0
+    preview_stride: int = 1
+    preview_readings: list[sonar_mapper.Reading] = field(default_factory=list)
+    preview_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    preview_revision: int = 0
+    preview_snapshot: dict | None = None
 
 
 active: dict[str, Scan] = {}
@@ -46,7 +55,43 @@ def record(code: str, rows: list[str]) -> None:
         log(f"[SONAR] Recording stopped for scan {scan.session}: {error}")
         scan.error = "Recording stopped early. Save the readings collected so far."
     else:
+        for row in rows:
+            reading = sonar_mapper.parse_reading(*(float(value or 0) for value in row.split(",")))
+            if reading is None:
+                continue
+            if scan.reading_count % scan.preview_stride == 0:
+                scan.preview_readings.append(reading)
+                if len(scan.preview_readings) > PREVIEW_SAMPLE_LIMIT:
+                    scan.preview_readings = scan.preview_readings[::2]
+                    scan.preview_stride *= 2
+            scan.reading_count += 1
         log(f"[SONAR][SCAN] Recorded session={scan.session} rows={len(rows)}")
+
+
+def _build_preview(code: str, readings: list[sonar_mapper.Reading], count: int) -> dict:
+    image, _ = sonar_mapper.build_map(readings, PREVIEW_RESOLUTION_M)
+    return {
+        "code": code,
+        "image": {"format": "png", "data": sonar_mapper.encode_snapshot(image, "png")},
+        "readingCount": len(readings),
+        "totalReadings": count,
+        "resolutionM": PREVIEW_RESOLUTION_M,
+        "updatedAt": time.time_ns() // 1_000_000,
+    }
+
+
+async def preview(code: str, scan: Scan) -> dict | None:
+    async with scan.preview_lock:
+        if scan.preview_revision != scan.reading_count and not scan.saving:
+            count = scan.reading_count
+            try:
+                scan.preview_snapshot = await asyncio.to_thread(
+                    _build_preview, code, scan.preview_readings.copy(), count
+                )
+            except ValueError as error:
+                log(f"[SONAR][MAP] Preview failed session={scan.session}: {error}")
+            scan.preview_revision = count
+        return scan.preview_snapshot
 
 
 def render(code: str, session: str) -> dict:

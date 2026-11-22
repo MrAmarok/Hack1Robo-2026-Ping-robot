@@ -142,10 +142,18 @@ async def test_mobile_scan_records_and_reopens_map(serveur):
 
             payload = {"session": session}
             await sensor.envoyer("0,0,0,0,0\n-0.60,0,0,0,60.00\ninvalid")
+            status = await pilot.sio.call("sonar_scan_status", {"preview": True})
+            assert status["session"] == session
+            assert status["readingCount"] == 1
+            assert status["snapshot"]["image"]["data"].startswith("iVBORw0KGgo")
+            assert await pilot.sio.call("sonar_scan_status", {"preview": True}) == status
+            assert (await other_pilot.sio.call("sonar_scan_status", {"preview": True}))["session"] is None
+            assert await pilot.sio.call("sonar_scan_list") == {"scans": []}
             saved = await pilot.sio.call("sonar_scan_save", payload)
             assert saved["mapError"] is None
             assert saved["snapshot"]["readingCount"] == 1
             assert saved["snapshot"]["image"]["data"].startswith("iVBORw0KGgo")
+            assert saved["snapshot"]["resolutionM"] < status["snapshot"]["resolutionM"]
             await sensor.envoyer("20,0,0,0,60")
 
             assert (sonar_scans.directory(code) / f"{session}.csv").read_text().splitlines() == [

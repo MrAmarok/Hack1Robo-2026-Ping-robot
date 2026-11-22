@@ -90,13 +90,21 @@ def _scan_status(code: str) -> dict:
         "session": scan.session if scan else None,
         "saving": bool(scan and scan.saving),
         "recordingError": scan.error if scan else None,
+        "readingCount": scan.reading_count if scan else 0,
     }
 
 
 @on("sonar_scan_status")
-async def _status(sid, _data):
+async def _status(sid, data):
     code = _scan_room(sid)
-    return _scan_status(code) if code else {"error": "Join the pairing room to view scans."}
+    if not code:
+        return {"error": "Join the pairing room to view scans."}
+    scan = sonar_scans.active.get(code)
+    if scan and payload(data).get("preview") is True:
+        snapshot = await sonar_scans.preview(code, scan)
+        if sonar_scans.active.get(code) is scan:
+            return {**_scan_status(code), "snapshot": snapshot}
+    return _scan_status(code)
 
 
 @on("sonar_scan_start")

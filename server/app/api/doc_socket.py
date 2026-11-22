@@ -107,11 +107,17 @@ RobotRondeStatusEmis = create_model(
 
 
 SonarScanSession = modele("SonarScanSession", session=(str, "Scan session ID."))
+SonarScanStatusRequest = modele(
+    "SonarScanStatusRequest",
+    preview=(Optional[bool], "Include a live map preview.", OPT),
+)
 SonarScanStatus = modele(
     "SonarScanStatus",
     session=(Optional[str], "Active scan session ID.", OPT),
     saving=(Optional[bool], "Whether map generation is running.", OPT),
     recordingError=(Optional[str], "Reason recording stopped early.", OPT),
+    readingCount=(Optional[int], "Number of valid echoes recorded.", OPT),
+    snapshot=(Optional[dict], "Live map preview in the sonar_map_snapshot format.", OPT),
     error=(Optional[str], "Reason the request failed.", OPT),
 )
 SonarScanResult = modele(
@@ -749,8 +755,8 @@ EVENEMENTS: list[Evenement] = [
 
     Evenement(
         "sonar_scan_status", T_SONAR, "Get scan status",
-        "Returns the active session ID, whether it is saving, and any recording error.",
-        emis=Vide, emis_par=A_APP,
+        "Returns the active scan status and optionally a live map preview.",
+        emis=SonarScanStatusRequest, emis_par=A_APP,
         ack=SonarScanStatus, ack_description="Recording status or an error.",
     ),
     Evenement(

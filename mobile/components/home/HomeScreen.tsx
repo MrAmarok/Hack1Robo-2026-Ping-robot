@@ -1104,6 +1104,7 @@ export default function HomeScreen() {
       </View>
 
       <CameraModal
+        key={pairCode.trim()}
         camFullscreen={camFullscreen}
         isLandscape={isLandscape}
         cameraOn={cameraOn}
