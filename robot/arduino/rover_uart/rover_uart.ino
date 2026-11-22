@@ -296,7 +296,7 @@ void distance_gerer() {
   } else {
     long dist = duree * 17 / 100;               // vitesse du son, aller-retour
     if (dist < 2 || dist > 400) return;     // hors des limites du capteur
-    Serial.print("0,0,0,0,");
+    Serial.print("D:0,0,0,0,");
     Serial.println(dist);
   }
   // Serial.print(F("D:"));
