@@ -13,6 +13,9 @@
 
 'use strict';
 
+// A charger AVANT tout le reste : les modules ci-dessous lisent process.env.
+require('./env').chargerEnv();
+
 const readline = require('readline');
 const { io } = require('socket.io-client');
 const { SerialPort } = require('serialport');
@@ -59,7 +62,8 @@ function sharedRobotMicDevice() {
 const ROBOT_MIC_DEVICE = sharedRobotMicDevice();
 
 const CONFIG = {
-  SERVER_URL: process.env.SERVER_URL || 'http://<ip-serveur>:3000',
+  // Adresse du serveur : dans robot/.env (voir .env.example), plus dans le code.
+  SERVER_URL: process.env.SERVER_URL || '',
   // Nom affiche dans l'app et dans les messages d'appairage. C'est aussi le
   // nom que l'assistant vocal se donne (voir SYSTEM_PROMPT cote serveur).
   PSEUDO: process.env.PSEUDO || 'Solana',
@@ -134,11 +138,13 @@ const CONFIG = {
   // avec les champs ci-dessous. Port 3002 = un des rares ports TCP ouverts
   // par le firewall du fournisseur VPS (tout l'UDP entrant y est bloque).
   RTC_PUSH_URL: process.env.RTC_PUSH_URL || '',
-  RTC_HOST: process.env.RTC_HOST || '<ip-serveur>',
+  // Vide = meme machine que SERVER_URL (rempli juste apres CONFIG).
+  RTC_HOST: process.env.RTC_HOST || '',
   RTC_PORT: Number(process.env.RTC_PORT || 3002),
   RTC_USER: process.env.RTC_USER || 'robot',
   // Mot de passe de publication MediaMTX (VPS: /opt/mediamtx/publish-pass.txt).
-  RTC_PASS: process.env.RTC_PASS || 'REDACTED',
+  // Jamais dans le code : robot/.env. Vide = pas de video WebRTC (MJPEG seul).
+  RTC_PASS: process.env.RTC_PASS || '',
   // Reglages 4G de SECOURS (si le signal de la cle est illisible) : prudents.
   // Mesure du 29/07 : SINR -1 dB en interieur => ~150-200 kb/s d'upload reel.
   // Le debit effectif est choisi par rtcLinkProfile() selon le SINR de la cle.
@@ -289,6 +295,24 @@ const CONFIG = {
 if (!CONFIG.CODE) {
   console.error('CODE manquant. Lance avec: CODE=123456 node robot.js');
   process.exit(1);
+}
+
+if (!CONFIG.SERVER_URL) {
+  console.error('SERVER_URL manquant. Copie robot/.env.example en robot/.env et remplis-le.');
+  process.exit(1);
+}
+
+if (!CONFIG.RTC_HOST) {
+  try {
+    CONFIG.RTC_HOST = new URL(CONFIG.SERVER_URL).hostname;
+  } catch {
+    console.error(`SERVER_URL invalide : ${CONFIG.SERVER_URL}`);
+    process.exit(1);
+  }
+}
+
+if (CONFIG.RTC_ENABLE && !CONFIG.RTC_PUSH_URL && !CONFIG.RTC_PASS) {
+  console.warn('RTC_PASS absent de robot/.env : video WebRTC desactivee, secours MJPEG seul.');
 }
 
 const now = () => new Date().toLocaleTimeString();

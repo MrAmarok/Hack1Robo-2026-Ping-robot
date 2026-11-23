@@ -20,9 +20,6 @@
       "bundleIdentifier": "com.andya.ping",
       "buildNumber": "5",
       "googleServicesFile": "./GoogleService-Info.plist",
-      "config": {
-        "googleMapsApiKey": "REDACTED"
-      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Votre position est nécessaire pour afficher votre localisation sur la carte et rejoindre votre contact.",
@@ -48,11 +45,6 @@
       },
       "package": "com.andya.ping",
       "googleServicesFile": "./google-services.json",
-      "config": {
-        "googleMaps": {
-          "apiKey": "REDACTED"
-        }
-      },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -97,8 +89,7 @@
       "router": {},
       "eas": {
         "projectId": "85450f46-7019-4732-a217-7d66824147e5"
-      },
-      "googleMapsApiKey": "REDACTED"
+      }
     }
   }
 }

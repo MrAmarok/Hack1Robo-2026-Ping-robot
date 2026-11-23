@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 // ========================
 // Serveur Ping, en HTTPS.
 //
-// C'etait 'http://<ip-serveur>:3000', en clair sur une IP nue. Sur iPhone la
+// C'etait une adresse http://<ip>:3000, en clair sur une IP nue. Sur iPhone la
 // socket passait malgre tout ; sur Android, RIEN : le systeme bloque le trafic
 // non chiffre par defaut depuis Android 9. L'app s'installait, s'ouvrait, et
 // n'apparaissait meme pas dans les journaux de connexion du serveur.

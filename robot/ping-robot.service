@@ -17,8 +17,9 @@ User=pi
 
 # --- Réglages du robot (mêmes que tes variables en ligne de commande) ---
 Environment=CODE=123456
-# Serveur VPS (le serveur ecoute sur le port 3000)
-Environment=SERVER_URL=http://<ip-serveur>:3000
+# Adresse du serveur et secrets (SERVER_URL, RTC_PASS, ROBOT_KEY) : PAS ici.
+# Ils sont dans le fichier .env du dossier robot/ (modele : .env.example),
+# que robot.js charge au demarrage. Ce fichier-ci est suivi par git.
 # MAC de l'enceinte Bluetooth (bluetoothctl). Vide = sortie audio par defaut.
 # Remplace par la MAC de ta nouvelle enceinte, ex: AA:BB:CC:DD:EE:FF
 Environment=SPEAKER_MAC=

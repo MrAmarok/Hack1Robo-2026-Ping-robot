@@ -28,7 +28,14 @@ detect_arduino_port() {
 
 # Réglages (surchargeables par variables d'environnement)
 CODE="${CODE:?Définis CODE, ex: CODE=123456 ./install-service.sh}"
-SERVER_URL="${SERVER_URL:-http://<ip-serveur>:3000}"
+# Adresse du serveur et secrets (RTC_PASS, ROBOT_KEY) : dans robot/.env, que
+# robot.js charge lui-meme. SERVER_URL passe ici en variable reste prioritaire.
+SERVER_URL="${SERVER_URL:-}"
+if [ -z "$SERVER_URL" ] && ! grep -qE '^[[:space:]]*(export[[:space:]]+)?SERVER_URL=.' "$DIR/.env" 2>/dev/null; then
+  echo "❌ SERVER_URL introuvable : copie .env.example en .env et remplis-le" >&2
+  echo "   (ou lance : SERVER_URL=http://<serveur>:3000 CODE=... ./install-service.sh)" >&2
+  exit 1
+fi
 # MAC de l'enceinte Bluetooth (vide = sortie audio par defaut). Ex: SPEAKER_MAC=AA:BB:CC:DD:EE:FF
 SPEAKER_MAC="${SPEAKER_MAC:-}"
 GPS_ENABLE="${GPS_ENABLE:-true}"
@@ -100,7 +107,6 @@ Type=simple
 WorkingDirectory=$DIR
 User=$USER_NAME
 Environment=CODE=$CODE
-Environment=SERVER_URL=$SERVER_URL
 Environment=SPEAKER_MAC=$SPEAKER_MAC
 Environment=GPS_ENABLE=$GPS_ENABLE
 Environment=GPS_PORT=$GPS_PORT
@@ -111,6 +117,7 @@ Environment=RTC_AUDIO=$RTC_AUDIO
 Environment=TTS_PLAYER=$TTS_PLAYER
 Environment=TTS_KEEP_LAST_CLIP=$TTS_KEEP_LAST_CLIP
 EOF
+  [ -n "$SERVER_URL" ]         && echo "Environment=SERVER_URL=$SERVER_URL"
   [ -n "$CAMERA_DEVICE" ]      && echo "Environment=CAMERA_DEVICE=$CAMERA_DEVICE"
   [ -n "$CAMERA_DEVICE_REAR" ] && echo "Environment=CAMERA_DEVICE_REAR=$CAMERA_DEVICE_REAR"
   [ -n "$VOICE_WAKE" ]         && echo "Environment=VOICE_WAKE=$VOICE_WAKE"

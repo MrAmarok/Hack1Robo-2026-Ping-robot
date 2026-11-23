@@ -57,13 +57,16 @@ npm install
 CODE=123456 node robot.js
 ```
 
-Options (variables d'environnement) :
+Options (variables d'environnement). L'adresse du serveur et les secrets vont dans `robot/.env`
+(ignoré par git) : `cp .env.example .env` puis remplis-le. Une variable passée en ligne de commande
+ou par le service systemd reste prioritaire sur ce fichier.
 
 | Variable | Défaut | Rôle |
 |----------|--------|------|
 | `CODE` | — (requis) | Code d'appairage, identique à ton contact |
 | `PSEUDO` | `Robot` | Nom du robot (doit différer du contact) |
-| `SERVER_URL` | `http://<ip-serveur>:3000` | Adresse de ton serveur VPS |
+| `SERVER_URL` | — (requis) | Adresse de ton serveur VPS, à mettre dans `robot/.env` |
+| `RTC_PASS` | — | Mot de passe de publication MediaMTX, dans `robot/.env`. Vide = pas de vidéo WebRTC |
 | `GPS_PORT` | `/dev/serial0` | Port du GPS (`/dev/ttyUSB0` si USB) |
 | `GPS_BAUD` | `9600` | Vitesse du module GPS |
 | `AUTO_ACCEPT` | `true` | Accepter automatiquement les demandes reçues |
